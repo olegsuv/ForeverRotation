@@ -1,0 +1,11 @@
+package-as: ForeverRotation
+
+ignore:
+  - README.md
+  - .github
+  - media/logo.png
+  - media/screenshot-settings.png
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
