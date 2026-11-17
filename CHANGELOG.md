@@ -1,3 +1,12 @@
+## 0.3.0
+
+Hunter priority rebuilt from the Forever leveling and spec guides:
+- Aimed Shot before Arcane Shot (hardest hit, baseline at 20); Multi-Shot instead of it on 2+ enemies; Volley on 3+.
+- Summon Hawk until 2 hawks are out on mobs that live, Arcane Shot otherwise (they share a cooldown).
+- Bestial Wrath, Intimidation and Rapid Fire on elites and players.
+- Survival melee weaving: Aspect of the Beast, Mongoose Bite, Raptor Strike, Strider Kick, Lacerate, traps (they work in combat in Forever).
+- Ranged specs in melee: Disengage to the pet, trap, Raptor Strike, Wing Clip.
+
 ## 0.2.7
 
 - Hunter in melee: Mongoose Bite, Disengage when the mob is on you and your pet is up, Immolation/Explosive Trap, Raptor Strike, then Wing Clip to step back.

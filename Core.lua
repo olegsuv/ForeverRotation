@@ -150,6 +150,16 @@ function ns.Trace(line)
     while #t > 300 do table.remove(t, 1) end
 end
 
+-- same as Ready, by spell name (for Forever-only spells whose ids we don't hard-code)
+function ns.ReadyName(spellName, checkRange)
+    local id = ns.known[spellName]
+    if not id then return false end
+    if not ns.Usable(id) then return false end
+    if ns.OnCooldown(id) then return false end
+    if checkRange and ns.InRange(id) == false then return false end
+    return true, id
+end
+
 function ns.InRange(id, unit)
     return ns.flag(ns.safe(C_Spell.IsSpellInRange, id, unit or "target"))
 end
@@ -208,9 +218,25 @@ function ns.PlayerBuff(name)
     return false
 end
 
+-- recent casts by name (to count summons such as Summon Hawk)
+local castLog = {}
+function ns.RecentCasts(name, window)
+    local list = castLog[name]
+    if not list then return 0 end
+    local now, n = GetTime(), 0
+    for i = #list, 1, -1 do
+        if now - list[i] <= window then n = n + 1 else break end
+    end
+    return n
+end
+
 local function onCast(spellID)
     local name = ns.safe(C_Spell.GetSpellName, spellID)
     if not name or isSecret(name) then return end
+    local list = castLog[name] or {}
+    castLog[name] = list
+    list[#list + 1] = GetTime()
+    if #list > 10 then table.remove(list, 1) end
     if ns.exclusiveBuffs[name] then
         lastExclusive = name
         if ns.db then ns.db.lastAspect = name end

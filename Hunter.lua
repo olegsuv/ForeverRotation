@@ -8,6 +8,7 @@ local AIMED_SHOT, RAPID_FIRE, RAPTOR_STRIKE, MONGOOSE_BITE = 19434, 3045, 2973, 
 local WING_CLIP, CONCUSSIVE_SHOT, AUTO_SHOT = 2974, 5116, 75
 local DISENGAGE, IMMOLATION_TRAP, EXPLOSIVE_TRAP = 781, 13795, 13813
 local SUMMON_HAWK, SNIPER_SHOT = 1293241, 1310687
+local VOLLEY, BESTIAL_WRATH, INTIMIDATION = 1510, 19574, 19577
 local ASPECT_HAWK, ASPECT_MONKEY, ASPECT_CHEETAH, ASPECT_PACK, ASPECT_BEAST, ASPECT_WILD = 13165, 13163, 5118, 13159, 13161, 20043
 
 -- best first
@@ -58,11 +59,35 @@ local function outOfMana()
     return false
 end
 
+-- Survival-style melee weaving: Strider Kick / Lacerate learned or Aspect of the Beast on
+local function meleeSpec()
+    if ns.known["Strider Kick"] or ns.known["Lacerate"] then return true end
+    local beast = name(ASPECT_BEAST)
+    return beast and ns.known[beast] and ns.PlayerBuff(beast) or false
+end
+
+local function first(...)
+    for i = 1, select("#", ...) do
+        local f = select(i, ...)
+        local ok, id = f()
+        if ok then return id end
+    end
+end
+
+--[[ Priority, from the Forever leveling and spec guides (Maxroll, Mobalytics, Method, Icy Veins, 11/2026):
+  Opener: Hunter's Mark (not on mobs that die fast), pet in, Serpent Sting (same), Aimed Shot (baseline
+  at 20, hardest hit; shares its 6 s cooldown with Multi-Shot), Summon Hawk (keep 2 out; shares its
+  cooldown with Arcane Shot), Arcane Shot when 2 hawks are out, mana is low or the mob dies fast.
+  2+ enemies: Multi-Shot instead of Aimed Shot; big packs: Volley (40, no cooldown).
+  Melee (Survival weave): Mongoose Bite when lit, Raptor Strike (no global cooldown), Strider Kick,
+  Lacerate when not ticking, Immolation Trap on a mob that lives 15 s (traps work in combat, 30 s shared).
+  Melee for ranged specs: hand the mob to the pet (Disengage), trap, Raptor, Wing Clip and step back. ]]
 local function rotation()
     local mana = ns.Percent("player", Enum.PowerType.Mana)
+    local fighting = ns.flag(UnitAffectingCombat("player"))
 
     -- potions first when it matters
-    if ns.db.potions and ns.flag(UnitAffectingCombat("player")) then
+    if ns.db.potions and fighting then
         local hp = ns.Percent("player")
         if hp and hp < ns.db.potionHealth then
             local s = ns.ReadyItem(HEAL_POTIONS); if s then return s end
@@ -72,76 +97,74 @@ local function rotation()
         end
     end
 
-    -- too close to shoot: melee (Raptor Strike's own range answer is always "yes" in Forever,
-    -- so the zone comes from Wing Clip / Mongoose Bite / interact distance)
     local zone = ns.RangeZone()
-    if zone == "melee" then
-        local onMe = targetOnMe()
-        local hp = ns.Percent("target")
-        local ok, id = ns.Ready(MONGOOSE_BITE); if ok then return id end
-        -- you have the aggro and a pet: hand the mob to the pet
-        if onMe == true and petAlive() then
-            ok, id = ns.Ready(DISENGAGE); if ok then return id end
+    local hp = ns.Percent("target")
+    local tough = ns.TargetIsTough()
+    local lives = not hp or hp >= 50 or tough -- worth a DoT / mark / hawk
+    local melee = meleeSpec()
+    local onMe = targetOnMe()
+
+    -- aspect: Beast for melee weaving, Hawk for shooting
+    if melee then
+        local beast = name(ASPECT_BEAST)
+        if beast and ns.known[beast] and not ns.PlayerBuff(beast) then
+            local ok, id = ns.Ready(ASPECT_BEAST); if ok then return id end
         end
-        -- a trap under the mob while it stands on you (all traps share a cooldown)
-        if not hp or hp >= 40 or ns.TargetIsTough() then
-            ok, id = ns.Ready(EXPLOSIVE_TRAP); if ok then return id end
-            ok, id = ns.Ready(IMMOLATION_TRAP); if ok then return id end
+    else
+        local hawk = name(ASPECT_HAWK)
+        local falcon = "Aspect of the Falcon" -- Hawk's attack power for melee too, counts as fine
+        if hawk and ns.known[hawk] and not ns.PlayerBuff(hawk) and not (ns.known[falcon] and ns.PlayerBuff(falcon)) then
+            local ok, id = ns.Ready(ASPECT_HAWK); if ok then return id end
         end
-        ok, id = ns.Ready(RAPTOR_STRIKE); if ok then return id end
-        -- slow it so you can step back to shooting range
-        if onMe ~= false then
-            ok, id = ns.Ready(WING_CLIP); if ok then return id end
-        end
-        return nil
     end
 
-    -- shooting without the damage aspect (Cheetah/Pack/Beast/none): switch to Hawk
-    local hawk = name(ASPECT_HAWK)
-    local falcon = "Aspect of the Falcon" -- Hawk's attack power for melee too, counts as fine
-    if hawk and ns.known[hawk] and not ns.PlayerBuff(hawk) and not (ns.known[falcon] and ns.PlayerBuff(falcon)) then
-        local ok, id = ns.Ready(ASPECT_HAWK); if ok then return id end
+    -- ===== melee range =====
+    if zone == "melee" then
+        local lacerate = "Lacerate"
+        return first(
+            function() return ns.Ready(MONGOOSE_BITE) end,
+            function() return ns.Ready(RAPTOR_STRIKE) end, -- replaces the next swing, no global cooldown
+            function() return ns.ReadyName("Strider Kick", true) end,
+            function() if ns.known[lacerate] and lives and not ns.DebuffUp(lacerate) then return ns.ReadyName(lacerate, true) end end,
+            function() if not melee and onMe == true and petAlive() then return ns.Ready(DISENGAGE) end end,
+            function() if lives then return ns.Ready(EXPLOSIVE_TRAP) end end,
+            function() if lives then return ns.Ready(IMMOLATION_TRAP) end end,
+            function() if not melee and onMe ~= false then return ns.Ready(WING_CLIP) end end,
+            function() return ns.ReadyName("Counterattack", true) end
+        )
     end
 
     local manaOk = mana == nil or mana >= 30
     local enemies = ns.EnemyCount(MULTI_SHOT)
 
-    -- 2+ enemies: Multi-Shot first
-    if enemies >= 2 then
-        local ok, id = ns.Ready(MULTI_SHOT, true); if ok then return id end
-    end
-
-    local hp = ns.Percent("target")
-    local tough = ns.TargetIsTough()
-
-    -- the mob is coming for you (not the pet): slow it before it reaches melee
-    if targetOnMe() == true and zone == "shoot" then
-        local ok, id = ns.Ready(CONCUSSIVE_SHOT, true); if ok then return id end
-    end
-
-    -- Hunter's Mark on targets that will live a while
-    if not ns.DebuffUp(name(HUNTERS_MARK)) and (not hp or hp >= 50 or tough) then
-        local ok, id = ns.Ready(HUNTERS_MARK, true); if ok then return id end
-    end
-
-    -- Serpent Sting
-    if manaOk and stingWorthIt() and not ns.DebuffUp(name(SERPENT_STING)) then
-        local ok, id = ns.Ready(SERPENT_STING, true); if ok then return id end
-    end
-
-    do local ok, id = ns.Ready(RAPID_FIRE); if ok and (tough or enemies >= 2) then return id end end
-
-    -- Aimed Shot and Multi-Shot share a cooldown in Forever: take the bigger one
+    -- ===== shooting range =====
     local okAimed, aimedID = ns.Ready(AIMED_SHOT, true)
     local okMulti, multiID = ns.Ready(MULTI_SHOT, true)
-    if okAimed and (not okMulti or dps(AIMED_SHOT, 1) >= dps(MULTI_SHOT, enemies)) then return aimedID end
-    do local ok, id = ns.Ready(SNIPER_SHOT, true); if ok and tough then return id end end
-    do local ok, id = ns.Ready(SUMMON_HAWK, true); if ok then return id end end
-    if manaOk then
-        local ok, id = ns.Ready(ARCANE_SHOT, true); if ok then return id end
-        if okMulti then return multiID end
-    end
-    return nil -- just let Auto Shot work
+    local hawks = ns.RecentCasts(name(SUMMON_HAWK) or "Summon Hawk", 18)
+
+    return first(
+        -- the mob runs at you (not the pet): slow it before it reaches you
+        function() if onMe == true and zone == "shoot" then return ns.Ready(CONCUSSIVE_SHOT, true) end end,
+        -- packs
+        function() if enemies >= 3 then return ns.Ready(VOLLEY, true) end end,
+        function() if enemies >= 2 then return okMulti, multiID end end,
+        -- marks and DoTs on mobs that will live
+        function() if lives and not ns.DebuffUp(name(HUNTERS_MARK)) then return ns.Ready(HUNTERS_MARK, true) end end,
+        function() if manaOk and stingWorthIt() and lives and not ns.DebuffUp(name(SERPENT_STING)) then return ns.Ready(SERPENT_STING, true) end end,
+        -- cooldowns on elites and players
+        function() if tough then return ns.Ready(BESTIAL_WRATH) end end,
+        function() if tough then return ns.Ready(INTIMIDATION, true) end end,
+        function() if tough or enemies >= 2 then return ns.Ready(RAPID_FIRE) end end,
+        -- dying mob: an instant Arcane Shot, not a 2 s cast
+        function() if not lives then return ns.Ready(ARCANE_SHOT, true) end end,
+        -- Aimed Shot: hardest hit (Multi-Shot instead when it hits more)
+        function() if okAimed and (not okMulti or dps(AIMED_SHOT, 1) >= dps(MULTI_SHOT, enemies)) then return okAimed, aimedID end end,
+        function() if tough then return ns.Ready(SNIPER_SHOT, true) end end,
+        -- Summon Hawk (keep 2 out on mobs that live) or Arcane Shot (same cooldown)
+        function() if hawks < 2 and lives and manaOk then return ns.Ready(SUMMON_HAWK, true) end end,
+        function() if manaOk or not lives then return ns.Ready(ARCANE_SHOT, true) end end,
+        function() if manaOk then return okMulti, multiID end end
+    ) -- nothing: let Auto Shot work
 end
 
 -- compact state for the trace log: name known/usable/cooldown/range
@@ -207,6 +230,7 @@ function ns.RangeZone()
 end
 
 function ns.InitClass()
+    ns.durations["Lacerate"] = ns.durations["Lacerate"] or 21
     for _, id in ipairs({ ASPECT_HAWK, ASPECT_MONKEY, ASPECT_CHEETAH, ASPECT_PACK, ASPECT_BEAST, ASPECT_WILD }) do
         local n = name(id)
         if n then ns.exclusiveBuffs[n] = true end
