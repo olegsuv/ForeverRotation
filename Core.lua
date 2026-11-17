@@ -10,7 +10,7 @@ ns.DEFAULTS = {
     potions = true,
     potionMana = 15,   -- suggest a mana potion below this % mana (in combat)
     potionHealth = 30, -- suggest a healing potion below this % health (in combat)
-    zone = true,       -- Hunter: range zone (melee / dead zone / shoot / too far) under the square
+    zone = false,      -- Hunter: range zone (melee / dead zone / shoot / too far) under the square
     zonePlate = true,  -- Hunter: the same zone as an icon next to the target's nameplate
     trace = true,      -- keep a short log of rotation decisions in SavedVariables (debug)
 }
@@ -182,26 +182,39 @@ end
 ns.exclusiveBuffs = {} -- [name] = true
 local lastExclusive
 
--- Is this self-buff on? Any source saying yes counts: the spell is "current"
--- (aspects show as an active toggle), a lit action button, a visible aura,
--- or (for aspects) the last one we saw you cast.
+-- Is this self-buff on? The game hides player auras from addons in combat, so we
+-- remember the last readable answer for exclusive buffs (aspects) and update it
+-- when you cast one. The memory survives /reload.
 function ns.PlayerBuff(name)
     if not name then return false end
+    local exclusive = ns.exclusiveBuffs[name]
     local id = ns.known[name]
     if id and C_Spell.IsCurrentSpell and ns.flag(ns.safe(C_Spell.IsCurrentSpell, id)) then return true end
     if ns.ButtonActive and ns.ButtonActive(name) then return true end
     if C_UnitAuras and C_UnitAuras.GetAuraDataBySpellName then
         local ok, aura = pcall(C_UnitAuras.GetAuraDataBySpellName, "player", name, "HELPFUL")
-        if ok and not isSecret(aura) and aura ~= nil then return true end
+        if ok and not isSecret(aura) then
+            if exclusive then
+                if aura ~= nil then
+                    lastExclusive = name
+                    if ns.db then ns.db.lastAspect = name end
+                end
+            end
+            if aura ~= nil then return true end
+            if not exclusive then return false end
+        end
     end
-    if ns.exclusiveBuffs[name] then return lastExclusive == name end
+    if exclusive then return lastExclusive == name end
     return false
 end
 
 local function onCast(spellID)
     local name = ns.safe(C_Spell.GetSpellName, spellID)
     if not name or isSecret(name) then return end
-    if ns.exclusiveBuffs[name] then lastExclusive = name end
+    if ns.exclusiveBuffs[name] then
+        lastExclusive = name
+        if ns.db then ns.db.lastAspect = name end
+    end
     local dur = ns.durations[name]
     if not dur then return end
     local key = targetKey()
@@ -328,6 +341,11 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
             if ForeverRotationDB[k] == nil then ForeverRotationDB[k] = v end
         end
         ns.db = ForeverRotationDB
+        lastExclusive = ns.db.lastAspect
+        if not ns.db.migratedZoneText then -- 0.2.6: zone text under the square off, icon by the nameplate instead
+            ns.db.zone = false
+            ns.db.migratedZoneText = true
+        end
     elseif event == "PLAYER_LOGIN" then
         ns.ScanSpellbook()
         if ns.InitClass then ns.InitClass() end
@@ -351,6 +369,7 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
     elseif event == "PLAYER_DEAD" then
         wipe(applied)
         lastExclusive = nil
+        ns.db.lastAspect = nil
     else
         ns.labelsDirty = true
     end

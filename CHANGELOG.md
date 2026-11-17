@@ -1,3 +1,8 @@
+## 0.2.6
+
+- Fixed: Aspect of the Hawk was suggested while active (player auras are hidden in combat; the last known aspect is now remembered, also across /reload).
+- The range zone text under the square is off by default; the icon by the nameplate shows it.
+
 ## 0.2.5
 
 - Hunter: range zone icon next to the target nameplate (melee / too close / shoot / too far).
