@@ -1,0 +1,11 @@
+## Interface: 16001
+## Title: Forever Rotation
+## Notes: Next-spell suggestion for Hunters and damage-per-second numbers on your action buttons (WoW Forever).
+## Author: olegsuv
+## Version: @project-version@
+## SavedVariables: ForeverRotationDB
+
+Core.lua
+Damage.lua
+Buttons.lua
+Hunter.lua
