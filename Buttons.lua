@@ -29,6 +29,20 @@ local function spellOf(b)
 end
 ns.ButtonSpell = spellOf
 
+-- an action button holding this spell is lit as active (aspects, auto shot...)
+function ns.ButtonActive(name)
+    for _, b in ipairs(buttons) do
+        local slot = slotOf(b)
+        if slot then
+            local id = spellOf(b)
+            if id and C_Spell.GetSpellName(id) == name then
+                if ns.flag(ns.safe(IsCurrentAction, slot)) then return true end
+            end
+        end
+    end
+    return false
+end
+
 local function makeGlow(b)
     local g = CreateFrame("Frame", nil, b)
     g:SetPoint("TOPLEFT", -2, 2)

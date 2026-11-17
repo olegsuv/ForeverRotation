@@ -180,11 +180,17 @@ end
 ns.exclusiveBuffs = {} -- [name] = true
 local lastExclusive
 
+-- Is this self-buff on? Any source saying yes counts: the spell is "current"
+-- (aspects show as an active toggle), a lit action button, a visible aura,
+-- or (for aspects) the last one we saw you cast.
 function ns.PlayerBuff(name)
     if not name then return false end
+    local id = ns.known[name]
+    if id and C_Spell.IsCurrentSpell and ns.flag(ns.safe(C_Spell.IsCurrentSpell, id)) then return true end
+    if ns.ButtonActive and ns.ButtonActive(name) then return true end
     if C_UnitAuras and C_UnitAuras.GetAuraDataBySpellName then
         local ok, aura = pcall(C_UnitAuras.GetAuraDataBySpellName, "player", name, "HELPFUL")
-        if ok and not isSecret(aura) then return aura ~= nil end
+        if ok and not isSecret(aura) and aura ~= nil then return true end
     end
     if ns.exclusiveBuffs[name] then return lastExclusive == name end
     return false

@@ -1,3 +1,7 @@
+## 0.2.3
+
+- Fixed: the Aspect of the Hawk reminder stayed on while the aspect was active.
+
 ## 0.2.2
 
 - Fixed: a melee spell was suggested when the target was far away.
