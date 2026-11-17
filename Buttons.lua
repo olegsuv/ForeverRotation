@@ -210,7 +210,7 @@ function ns.InitIcon()
     zone.elapsed = 0
     local ZONES = {
         melee = { "MELEE", 1, 0.5, 0.2 },
-        dead  = { "DEAD ZONE", 1, 0.15, 0.15 },
+        dead  = { "TOO CLOSE", 1, 0.15, 0.15 },
         shoot = { "SHOOT", 0.3, 1, 0.3 },
         far   = { "TOO FAR", 0.6, 0.6, 0.6 },
     }

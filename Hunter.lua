@@ -5,6 +5,7 @@ if class ~= "HUNTER" then return end
 
 local SERPENT_STING, HUNTERS_MARK, ARCANE_SHOT, MULTI_SHOT = 1978, 1130, 3044, 2643
 local AIMED_SHOT, RAPID_FIRE, RAPTOR_STRIKE, MONGOOSE_BITE = 19434, 3045, 2973, 1495
+local WING_CLIP, CONCUSSIVE_SHOT, AUTO_SHOT = 2974, 5116, 75
 local SUMMON_HAWK, SNIPER_SHOT = 1293241, 1310687
 local ASPECT_HAWK, ASPECT_MONKEY, ASPECT_CHEETAH, ASPECT_PACK, ASPECT_BEAST, ASPECT_WILD = 13165, 13163, 5118, 13159, 13161, 20043
 
@@ -30,6 +31,18 @@ local function dps(baseID, targets)
     return id and ns.DPS(id, targets) or 0
 end
 
+-- not enough mana for a basic shot (the game hides mana numbers in combat)
+local function outOfMana()
+    for _, b in ipairs({ ARCANE_SHOT, SERPENT_STING }) do
+        local _, id = ns.Spell(b)
+        if id then
+            local _, noMana = ns.Usable(id)
+            if noMana == true then return true end
+        end
+    end
+    return false
+end
+
 local function rotation()
     local mana = ns.Percent("player", Enum.PowerType.Mana)
 
@@ -39,16 +52,15 @@ local function rotation()
         if hp and hp < ns.db.potionHealth then
             local s = ns.ReadyItem(HEAL_POTIONS); if s then return s end
         end
-        if mana and mana < ns.db.potionMana then
+        if (mana and mana < ns.db.potionMana) or (not mana and outOfMana()) then
             local s = ns.ReadyItem(MANA_POTIONS); if s then return s end
         end
     end
 
-    -- too close to shoot: melee
-    local _, arcaneID = ns.Spell(ARCANE_SHOT)
-    local _, raptorID = ns.Spell(RAPTOR_STRIKE)
-    local shootRange = arcaneID and ns.InRange(arcaneID)
-    if raptorID and ns.InRange(raptorID) == true and shootRange == false then
+    -- too close to shoot: melee (Raptor Strike's own range answer is always "yes" in Forever,
+    -- so the zone comes from Wing Clip / Mongoose Bite / interact distance)
+    local zone = ns.RangeZone()
+    if zone == "melee" then
         local ok, id = ns.Ready(MONGOOSE_BITE); if ok then return id end
         ok, id = ns.Ready(RAPTOR_STRIKE); if ok then return id end
         return nil
@@ -119,26 +131,43 @@ function ns.TraceState()
         end
     end
     local sting = name(SERPENT_STING)
+    out[#out + 1] = "zone=" .. tostring(ns.RangeZone())
+    out[#out + 1] = "near=" .. tostring(ns.flag(ns.safe(CheckInteractDistance, "target", 3)))
+    local _, wc = ns.Spell(WING_CLIP)
+    out[#out + 1] = "wing=" .. tostring(wc and ns.InRange(wc))
     out[#out + 1] = "stingUp=" .. tostring(ns.DebuffUp(sting))
     out[#out + 1] = "hawkUp=" .. tostring(ns.PlayerBuff(name(ASPECT_HAWK)))
     return table.concat(out, " ")
 end
 
 -- Where the target is for a hunter: melee (~5 yd), dead zone (5-8 yd, no shots),
--- shoot (8-35 yd) or too far. nil when there is no hostile target.
+-- shoot (8-35 yd) or too far. nil when unknown or no hostile target.
+local function firstAnswer(list)
+    for _, b in ipairs(list) do
+        local _, id = ns.Spell(b)
+        if id then
+            local r = ns.InRange(id)
+            if r ~= nil then return r end
+        end
+    end
+    return nil
+end
+
 function ns.RangeZone()
     if not ns.HostileTarget() then return nil end
-    local _, raptor = ns.Spell(RAPTOR_STRIKE)
-    local _, arcane = ns.Spell(ARCANE_SHOT)
-    local shootID = arcane or 75 -- Auto Shot
-    if raptor and ns.InRange(raptor) == true then return "melee" end
-    local shoot = ns.InRange(shootID)
-    if shoot == true then return "shoot" end
-    if shoot == nil then return nil end
-    -- not in melee and not in shot range: close (dead zone) or far?
+    local melee = firstAnswer({ WING_CLIP, MONGOOSE_BITE })
     local near = ns.flag(ns.safe(CheckInteractDistance, "target", 3)) -- about 10 yd
-    if near == true then return "dead" end
-    if near == false then return "far" end
+    if melee == nil and near == false then melee = false end
+    if melee == true then return "melee" end
+    local shoot = firstAnswer({ ARCANE_SHOT, SERPENT_STING, CONCUSSIVE_SHOT })
+    if shoot == nil then shoot = ns.InRange(AUTO_SHOT) end
+    if shoot == true then return "shoot" end
+    if near == true then
+        -- inside 10 yd but no shot: dead zone, or melee when we had no melee probe
+        if melee == nil then return "melee" end -- no melee probe learned yet: close enough to hit
+        return "dead"
+    end
+    if shoot == false then return "far" end
     return nil
 end
 

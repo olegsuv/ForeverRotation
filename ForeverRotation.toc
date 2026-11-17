@@ -15,4 +15,5 @@ Core.lua
 Damage.lua
 Buttons.lua
 Hunter.lua
+Zone.lua
 Options.lua

@@ -1,3 +1,9 @@
+## 0.2.5
+
+- Hunter: range zone icon next to the target nameplate (melee / too close / shoot / too far).
+- Fixed: Raptor Strike was suggested on far targets (its range check always says yes in Forever); melee is now detected with Wing Clip / Mongoose Bite.
+- Mana potion is suggested when you no longer have mana for a shot (the game hides mana numbers in combat).
+
 ## 0.2.4
 
 - Hunter: range zone under the square - MELEE, DEAD ZONE (too close to shoot), SHOOT or TOO FAR.
