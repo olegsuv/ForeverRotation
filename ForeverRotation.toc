@@ -4,8 +4,13 @@
 ## Author: olegsuv
 ## Version: @project-version@
 ## SavedVariables: ForeverRotationDB
+## IconTexture: Interface\AddOns\ForeverRotation\media\icon
+## AddonCompartmentFunc: ForeverRotation_OnAddonCompartmentClick
+## X-License: MIT
 
+ForeverUI.lua
 Core.lua
 Damage.lua
 Buttons.lua
 Hunter.lua
+Options.lua

@@ -63,7 +63,7 @@ function ns.InitButtons()
             local b = _G[prefix .. i]
             if b then
                 local label = b:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
-                label:SetPoint("TOP", b, "TOP", 0, -2)
+                label:SetPoint("BOTTOMLEFT", b, "BOTTOMLEFT", 2, 2) -- top-right is the key bind
                 label:SetTextColor(1, 0.85, 0.2)
                 b.frLabel = label
                 b.frGlow = makeGlow(b)
@@ -91,77 +91,130 @@ function ns.RefreshLabels()
 end
 
 -- glow buttons holding the suggested spell (matched by name, any rank)
+local function hotkeyOf(b)
+    local hk = b.HotKey or (b.GetName and _G[b:GetName() .. "HotKey"])
+    local t = hk and hk:GetText()
+    if not t or t == "" or t == RANGE_INDICATOR then return nil end
+    return t
+end
+
 local function glowButtons(spellID)
     local name = spellID and C_Spell.GetSpellName(spellID)
+    local key
     for _, b in ipairs(buttons) do
-        local on = false
-        if name and ns.db.glow and b:IsVisible() then
+        local match = false
+        if name and b:IsVisible() then
             local id = spellOf(b)
-            on = id and C_Spell.GetSpellName(id) == name or false
+            match = id and C_Spell.GetSpellName(id) == name or false
+            if match and not key then key = hotkeyOf(b) end
         end
+        local on = match and ns.db.glow
         if on and not b.frGlow:IsShown() then
             b.frGlow:Show(); b.frGlow.anim:Play()
         elseif not on and b.frGlow:IsShown() then
             b.frGlow.anim:Stop(); b.frGlow:Hide()
         end
     end
+    return key
 end
 
 ---------------------------------------------------------------------------
--- Next-spell icon
+-- Next-spell square: spell icon + key bind + damage, like an action button.
+-- Either free (drag it) or centred between the player and target frames.
 ---------------------------------------------------------------------------
 local icon
 
+local function placeBetweenFrames()
+    local pf, tf = PlayerFrame, TargetFrame
+    if not (pf and tf) then return false end
+    local pr, tl = pf:GetRight(), tf:GetLeft()
+    local pb, pt = pf:GetBottom(), pf:GetTop()
+    if not (pr and tl and pb and pt) then return false end
+    local ps, ts, us = pf:GetEffectiveScale(), tf:GetEffectiveScale(), UIParent:GetEffectiveScale()
+    local x = (pr * ps + tl * ts) / 2 / us
+    local y = (pb + pt) / 2 * ps / us
+    local s = icon:GetScale()
+    icon:ClearAllPoints()
+    icon:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x / s, y / s)
+    return true
+end
+
+function ns.PlaceIcon()
+    if not icon then return end
+    if ns.db.iconMode == "center" and placeBetweenFrames() then return end
+    icon:ClearAllPoints()
+    local p = ns.db.iconPos
+    if p then
+        icon:SetPoint(p[1], UIParent, p[2], p[3], p[4])
+    else
+        icon:SetPoint("CENTER", UIParent, "CENTER", 0, -170)
+    end
+end
+
 function ns.InitIcon()
     icon = CreateFrame("Frame", "ForeverRotationIcon", UIParent, "BackdropTemplate")
-    icon:SetSize(44, 44)
-    icon:SetPoint("CENTER", UIParent, "CENTER", 0, -170)
+    icon:SetSize(40, 40)
     icon:SetMovable(true)
     icon:SetClampedToScreen(true)
+    icon:SetFrameStrata("MEDIUM")
     icon:RegisterForDrag("LeftButton")
-    icon:SetScript("OnDragStart", function(self) if not ns.db.locked then self:StartMoving() end end)
+    icon:SetScript("OnDragStart", function(self)
+        if not ns.db.locked and ns.db.iconMode ~= "center" then self:StartMoving() end
+    end)
     icon:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
         local p, _, rp, x, y = self:GetPoint()
         ns.db.iconPos = { p, rp, x, y }
     end)
+    icon:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+    icon:SetBackdropBorderColor(0, 0, 0, 1)
     icon.tex = icon:CreateTexture(nil, "ARTWORK")
-    icon.tex:SetAllPoints()
+    icon.tex:SetPoint("TOPLEFT", 1, -1)
+    icon.tex:SetPoint("BOTTOMRIGHT", -1, 1)
     icon.tex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-    icon.text = icon:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    icon.text:SetPoint("TOP", icon, "BOTTOM", 0, -2)
-    if ns.db.iconPos then
-        local p = ns.db.iconPos
-        icon:ClearAllPoints()
-        icon:SetPoint(p[1], UIParent, p[2], p[3], p[4])
-    end
-    ns.UpdateIconLock()
+    icon.key = icon:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmallGray")
+    icon.key:SetPoint("TOPRIGHT", -2, -3)
+    icon.dmg = icon:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
+    icon.dmg:SetPoint("BOTTOMLEFT", 2, 2)
+    icon.dmg:SetTextColor(1, 0.85, 0.2)
+    icon.elapsed = 0
+    icon:SetScript("OnUpdate", function(self, e)
+        self.elapsed = self.elapsed + e
+        if self.elapsed > 1 then -- unit frames can move (EasyFrames etc.)
+            self.elapsed = 0
+            if ns.db.iconMode == "center" then ns.PlaceIcon() end
+        end
+    end)
     icon:Hide()
+    ns.UpdateIconLock()
 end
 
 function ns.UpdateIconLock()
     if not icon then return end
     icon:SetScale(ns.db.iconScale or 1)
-    icon:EnableMouse(not ns.db.locked)
-    if not ns.db.locked then
-        icon:SetBackdrop({ edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12 })
+    ns.PlaceIcon()
+    local movable = not ns.db.locked and ns.db.iconMode ~= "center"
+    icon:EnableMouse(movable)
+    if movable then
+        icon:SetBackdropBorderColor(0.2, 1, 0.3, 1)
+        if not ns.suggestion then icon.tex:SetTexture("Interface\\AddOns\\ForeverRotation\\media\\icon") end
         icon:Show()
-        if not ns.suggestion then icon.tex:SetTexture(134400) end
     else
-        icon:SetBackdrop(nil)
-        ns.ShowSuggestion(ns.suggestion)
+        icon:SetBackdropBorderColor(0, 0, 0, 1)
     end
+    ns.ShowSuggestion(ns.suggestion)
 end
 
 function ns.ShowSuggestion(spellID)
-    glowButtons(spellID)
+    local key = glowButtons(spellID)
     if not icon then return end
     if spellID and ns.db.icon then
         icon.tex:SetTexture(C_Spell.GetSpellTexture(spellID))
+        icon.key:SetText(key or "")
         local dps = ns.db.labels and ns.DPS(spellID, ns.EnemyCount(2643))
-        icon.text:SetText(dps and ns.Short(dps) or "")
+        icon.dmg:SetText(dps and ns.Short(dps) or "")
         icon:Show()
-    elseif ns.db.locked then
+    elseif ns.db.locked or ns.db.iconMode == "center" or not ns.db.icon then
         icon:Hide()
     end
 end

@@ -1,3 +1,10 @@
+## 0.2.0
+
+- Settings window (`/frot`, minimap button, addons menu).
+- Next-spell square between the player and target frames (or free position), with key bind and damage.
+- Numbers moved to the bottom-left corner of buttons (key binds stay readable).
+- Addon icon.
+
 ## 0.1.0
 
 - First version: Hunter next-spell suggestion, damage-per-second numbers on buttons and tooltips.

@@ -3,7 +3,8 @@ local ADDON, ns = ...
 ns.DEFAULTS = {
     labels = true,     -- damage-per-second numbers on action buttons
     glow = true,       -- highlight the suggested spell on your bars
-    icon = true,       -- separate "next spell" icon
+    icon = true,       -- separate "next spell" square
+    iconMode = "center", -- "center" = between player and target frames, "free" = drag it
     iconScale = 1,
     locked = true,
     potions = true,
@@ -287,6 +288,7 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
         ns.InitButtons()
         ns.InitIcon()
         ns.InitTooltip()
+        if ns.InitOptions then ns.InitOptions() end
         frame:SetScript("OnUpdate", update)
     elseif event == "SPELLS_CHANGED" or event == "LEARNED_SPELL_IN_SKILL_LINE" then
         ns.ScanSpellbook()
@@ -324,10 +326,11 @@ end
 -- Slash commands
 ---------------------------------------------------------------------------
 local HELP = {
+    "/frot - settings window (also the minimap button)",
     "/frot labels - numbers on buttons on/off",
     "/frot glow - highlight suggested spell on/off",
     "/frot icon - separate next-spell icon on/off",
-    "/frot unlock | lock - move the icon (drag it)",
+    "/frot unlock | lock - move the square (free position mode)",
     "/frot scale 1.2 - icon size",
     "/frot potions - potion suggestions on/off",
     "/frot debug - print what the addon reads from your buttons",
@@ -355,6 +358,8 @@ SlashCmdList.FOREVERROTATION = function(msg)
         ns.UpdateIconLock()
     elseif cmd == "debug" then
         ns.Debug()
+    elseif cmd == "" or cmd == "config" or cmd == "options" then
+        if ns.ToggleOptions then ns.ToggleOptions() end
     else
         for _, line in ipairs(HELP) do ns.Print(line) end
     end
