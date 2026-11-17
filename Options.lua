@@ -24,6 +24,8 @@ local function build()
     win:AddCheck("Unlock to drag it (when not between frames)", function() return not db.locked end,
         function(v) db.locked = not v; ns.UpdateIconLock() end,
         function() return db.icon and db.iconMode ~= "center" end)
+    win:AddCheck("Range zone under it (melee / dead zone / shoot)", function() return db.zone end,
+        function(v) db.zone = v end, function() return db.icon end)
     win:AddSlider("Square size", 0.5, 2, 0.1, function() return db.iconScale end,
         function(v) db.iconScale = v; ns.UpdateIconLock() end, function(v) return ("%.1fx"):format(v) end)
 

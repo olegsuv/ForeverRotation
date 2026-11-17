@@ -200,6 +200,36 @@ function ns.InitIcon()
         end
     end)
     icon:Hide()
+
+    -- range zone line under the square (shown whenever there is a hostile target)
+    local zone = CreateFrame("Frame", nil, UIParent)
+    zone:SetSize(120, 16)
+    zone:SetPoint("TOP", icon, "BOTTOM", 0, -3)
+    zone.text = zone:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    zone.text:SetPoint("CENTER")
+    zone.elapsed = 0
+    local ZONES = {
+        melee = { "MELEE", 1, 0.5, 0.2 },
+        dead  = { "DEAD ZONE", 1, 0.15, 0.15 },
+        shoot = { "SHOOT", 0.3, 1, 0.3 },
+        far   = { "TOO FAR", 0.6, 0.6, 0.6 },
+    }
+    zone:SetScript("OnUpdate", function(self, e)
+        self.elapsed = self.elapsed + e
+        if self.elapsed < 0.2 then return end
+        self.elapsed = 0
+        local z = ns.db.zone and ns.db.icon and ns.RangeZone and ns.RangeZone()
+        local d = z and ZONES[z]
+        if d then
+            self.text:SetText(d[1])
+            self.text:SetTextColor(d[2], d[3], d[4])
+            self.text:Show()
+        else
+            self.text:Hide()
+        end
+        self:SetScale(ns.db.iconScale or 1)
+    end)
+    ns.zoneFrame = zone
     ns.UpdateIconLock()
 end
 

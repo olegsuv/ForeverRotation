@@ -1,3 +1,7 @@
+## 0.2.4
+
+- Hunter: range zone under the square - MELEE, DEAD ZONE (too close to shoot), SHOOT or TOO FAR.
+
 ## 0.2.3
 
 - Fixed: the Aspect of the Hawk reminder stayed on while the aspect was active.

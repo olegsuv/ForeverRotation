@@ -124,6 +124,24 @@ function ns.TraceState()
     return table.concat(out, " ")
 end
 
+-- Where the target is for a hunter: melee (~5 yd), dead zone (5-8 yd, no shots),
+-- shoot (8-35 yd) or too far. nil when there is no hostile target.
+function ns.RangeZone()
+    if not ns.HostileTarget() then return nil end
+    local _, raptor = ns.Spell(RAPTOR_STRIKE)
+    local _, arcane = ns.Spell(ARCANE_SHOT)
+    local shootID = arcane or 75 -- Auto Shot
+    if raptor and ns.InRange(raptor) == true then return "melee" end
+    local shoot = ns.InRange(shootID)
+    if shoot == true then return "shoot" end
+    if shoot == nil then return nil end
+    -- not in melee and not in shot range: close (dead zone) or far?
+    local near = ns.flag(ns.safe(CheckInteractDistance, "target", 3)) -- about 10 yd
+    if near == true then return "dead" end
+    if near == false then return "far" end
+    return nil
+end
+
 function ns.InitClass()
     for _, id in ipairs({ ASPECT_HAWK, ASPECT_MONKEY, ASPECT_CHEETAH, ASPECT_PACK, ASPECT_BEAST, ASPECT_WILD }) do
         local n = name(id)

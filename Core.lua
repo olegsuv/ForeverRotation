@@ -10,6 +10,7 @@ ns.DEFAULTS = {
     potions = true,
     potionMana = 15,   -- suggest a mana potion below this % mana (in combat)
     potionHealth = 30, -- suggest a healing potion below this % health (in combat)
+    zone = true,       -- Hunter: range zone (melee / dead zone / shoot / too far) under the square
     trace = true,      -- keep a short log of rotation decisions in SavedVariables (debug)
 }
 
