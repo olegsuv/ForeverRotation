@@ -6,6 +6,7 @@ if class ~= "HUNTER" then return end
 local SERPENT_STING, HUNTERS_MARK, ARCANE_SHOT, MULTI_SHOT = 1978, 1130, 3044, 2643
 local AIMED_SHOT, RAPID_FIRE, RAPTOR_STRIKE, MONGOOSE_BITE = 19434, 3045, 2973, 1495
 local SUMMON_HAWK, SNIPER_SHOT = 1293241, 1310687
+local ASPECT_HAWK, ASPECT_MONKEY, ASPECT_CHEETAH, ASPECT_PACK, ASPECT_BEAST, ASPECT_WILD = 13165, 13163, 5118, 13159, 13161, 20043
 
 -- best first
 local MANA_POTIONS = { 13444, 13443, 6149, 3827, 3385, 2455 }
@@ -53,6 +54,13 @@ local function rotation()
         return nil
     end
 
+    -- shooting without the damage aspect (Cheetah/Pack/Beast/none): switch to Hawk
+    local hawk = name(ASPECT_HAWK)
+    local falcon = "Aspect of the Falcon" -- Hawk's attack power for melee too, counts as fine
+    if hawk and ns.known[hawk] and not ns.PlayerBuff(hawk) and not (ns.known[falcon] and ns.PlayerBuff(falcon)) then
+        local ok, id = ns.Ready(ASPECT_HAWK); if ok then return id end
+    end
+
     local manaOk = mana == nil or mana >= 30
     local enemies = ns.EnemyCount(MULTI_SHOT)
 
@@ -90,6 +98,11 @@ local function rotation()
 end
 
 function ns.InitClass()
+    for _, id in ipairs({ ASPECT_HAWK, ASPECT_MONKEY, ASPECT_CHEETAH, ASPECT_PACK, ASPECT_BEAST, ASPECT_WILD }) do
+        local n = name(id)
+        if n then ns.exclusiveBuffs[n] = true end
+    end
+    ns.exclusiveBuffs["Aspect of the Falcon"] = true
     local mark = name(HUNTERS_MARK)
     if mark then ns.durations[mark] = 120 end
     local sting = name(SERPENT_STING)

@@ -162,9 +162,25 @@ function ns.DebuffUp(name)
     return t and t[name] and t[name] > GetTime() or false
 end
 
+-- Exclusive self-buffs (hunter aspects): remember the last one cast as a fallback
+-- when the game hides the player's auras.
+ns.exclusiveBuffs = {} -- [name] = true
+local lastExclusive
+
+function ns.PlayerBuff(name)
+    if not name then return false end
+    if C_UnitAuras and C_UnitAuras.GetAuraDataBySpellName then
+        local ok, aura = pcall(C_UnitAuras.GetAuraDataBySpellName, "player", name, "HELPFUL")
+        if ok and not isSecret(aura) then return aura ~= nil end
+    end
+    if ns.exclusiveBuffs[name] then return lastExclusive == name end
+    return false
+end
+
 local function onCast(spellID)
     local name = ns.safe(C_Spell.GetSpellName, spellID)
     if not name or isSecret(name) then return end
+    if ns.exclusiveBuffs[name] then lastExclusive = name end
     local dur = ns.durations[name]
     if not dur then return end
     local key = targetKey()
@@ -304,6 +320,7 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
         plates[arg1] = nil
     elseif event == "PLAYER_DEAD" then
         wipe(applied)
+        lastExclusive = nil
     else
         ns.labelsDirty = true
     end

@@ -1,3 +1,7 @@
+## 0.2.1
+
+- Hunter: reminds to switch to Aspect of the Hawk when shooting in Cheetah/Pack/Beast or with no aspect.
+
 ## 0.2.0
 
 - Settings window (`/frot`, minimap button, addons menu).
