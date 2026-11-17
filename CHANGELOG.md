@@ -1,3 +1,9 @@
+## 0.2.2
+
+- Fixed: a melee spell was suggested when the target was far away.
+- Shots are only suggested when the target is in range.
+- Short decision log in saved variables for bug reports (`/frot trace` to turn it off).
+
 ## 0.2.1
 
 - Hunter: reminds to switch to Aspect of the Hawk when shooting in Cheetah/Pack/Beast or with no aspect.

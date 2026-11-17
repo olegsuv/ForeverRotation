@@ -48,7 +48,7 @@ local function rotation()
     local _, arcaneID = ns.Spell(ARCANE_SHOT)
     local _, raptorID = ns.Spell(RAPTOR_STRIKE)
     local shootRange = arcaneID and ns.InRange(arcaneID)
-    if raptorID and ns.InRange(raptorID) == true and shootRange ~= true then
+    if raptorID and ns.InRange(raptorID) == true and shootRange == false then
         local ok, id = ns.Ready(MONGOOSE_BITE); if ok then return id end
         ok, id = ns.Ready(RAPTOR_STRIKE); if ok then return id end
         return nil
@@ -66,7 +66,7 @@ local function rotation()
 
     -- 2+ enemies: Multi-Shot first
     if enemies >= 2 then
-        local ok, id = ns.Ready(MULTI_SHOT); if ok then return id end
+        local ok, id = ns.Ready(MULTI_SHOT, true); if ok then return id end
     end
 
     local hp = ns.Percent("target")
@@ -74,27 +74,54 @@ local function rotation()
 
     -- Hunter's Mark on targets that will live a while
     if not ns.DebuffUp(name(HUNTERS_MARK)) and (not hp or hp >= 50 or tough) then
-        local ok, id = ns.Ready(HUNTERS_MARK); if ok then return id end
+        local ok, id = ns.Ready(HUNTERS_MARK, true); if ok then return id end
     end
 
     -- Serpent Sting
     if manaOk and stingWorthIt() and not ns.DebuffUp(name(SERPENT_STING)) then
-        local ok, id = ns.Ready(SERPENT_STING); if ok then return id end
+        local ok, id = ns.Ready(SERPENT_STING, true); if ok then return id end
     end
 
     do local ok, id = ns.Ready(RAPID_FIRE); if ok and (tough or enemies >= 2) then return id end end
 
     -- Aimed Shot and Multi-Shot share a cooldown in Forever: take the bigger one
-    local okAimed, aimedID = ns.Ready(AIMED_SHOT)
-    local okMulti, multiID = ns.Ready(MULTI_SHOT)
+    local okAimed, aimedID = ns.Ready(AIMED_SHOT, true)
+    local okMulti, multiID = ns.Ready(MULTI_SHOT, true)
     if okAimed and (not okMulti or dps(AIMED_SHOT, 1) >= dps(MULTI_SHOT, enemies)) then return aimedID end
-    do local ok, id = ns.Ready(SNIPER_SHOT); if ok and tough then return id end end
-    do local ok, id = ns.Ready(SUMMON_HAWK); if ok then return id end end
+    do local ok, id = ns.Ready(SNIPER_SHOT, true); if ok and tough then return id end end
+    do local ok, id = ns.Ready(SUMMON_HAWK, true); if ok then return id end end
     if manaOk then
-        local ok, id = ns.Ready(ARCANE_SHOT); if ok then return id end
+        local ok, id = ns.Ready(ARCANE_SHOT, true); if ok then return id end
         if okMulti then return multiID end
     end
     return nil -- just let Auto Shot work
+end
+
+-- compact state for the trace log: name known/usable/cooldown/range
+function ns.TraceState()
+    local out = {}
+    local mana = ns.Percent("player", Enum.PowerType.Mana)
+    out[#out + 1] = ("mana=%s"):format(mana and ("%d"):format(mana) or "?")
+    out[#out + 1] = ("en=%d"):format(ns.EnemyCount(MULTI_SHOT))
+    for _, b in ipairs({ HUNTERS_MARK, SERPENT_STING, ARCANE_SHOT, MULTI_SHOT, AIMED_SHOT, RAPTOR_STRIKE }) do
+        local n, id = ns.Spell(b)
+        if id then
+            local u = ns.Usable(id)
+            local info = ns.safe(C_Spell.GetSpellCooldown, id)
+            local cdText = "?"
+            if type(info) == "table" then
+                if ns.isSecret(info.duration) or ns.isSecret(info.startTime) then cdText = "S"
+                elseif ns.num(info.duration) then cdText = ("%.1f"):format(info.duration) end
+            end
+            local r = ns.InRange(id)
+            out[#out + 1] = ("%s:%s/u%s/cd%s(%s)/r%s"):format(n:sub(1, 6), id, u and 1 or 0,
+                ns.OnCooldown(id) and 1 or 0, cdText, r == nil and "?" or (r and 1 or 0))
+        end
+    end
+    local sting = name(SERPENT_STING)
+    out[#out + 1] = "stingUp=" .. tostring(ns.DebuffUp(sting))
+    out[#out + 1] = "hawkUp=" .. tostring(ns.PlayerBuff(name(ASPECT_HAWK)))
+    return table.concat(out, " ")
 end
 
 function ns.InitClass()

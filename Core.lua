@@ -10,6 +10,7 @@ ns.DEFAULTS = {
     potions = true,
     potionMana = 15,   -- suggest a mana potion below this % mana (in combat)
     potionHealth = 30, -- suggest a healing potion below this % health (in combat)
+    trace = true,      -- keep a short log of rotation decisions in SavedVariables (debug)
 }
 
 local GetTime, pcall, ipairs, pairs, type = GetTime, pcall, ipairs, pairs, type
@@ -31,6 +32,7 @@ end
 -- true / false / nil (unknown or hidden)
 function ns.flag(v)
     if v == nil or isSecret(v) then return nil end
+    if type(v) == "number" then return v ~= 0 end -- old-style 1/0 answers (0 is truthy in Lua)
     return v and true or false
 end
 
@@ -127,12 +129,23 @@ function ns.Usable(id)
     return true
 end
 
--- known + usable + off cooldown
-function ns.Ready(baseID)
+-- known + usable + off cooldown (+ target not out of range when checkRange)
+function ns.Ready(baseID, checkRange)
     local _, id = ns.Spell(baseID)
     if not id then return false end
     if not ns.Usable(id) then return false end
-    return not ns.OnCooldown(id), id
+    if ns.OnCooldown(id) then return false end
+    if checkRange and ns.InRange(id) == false then return false end
+    return true, id
+end
+
+-- Trace: why the rotation picked what it picked (saved, for remote debugging)
+function ns.Trace(line)
+    if not ns.db or not ns.db.trace then return end
+    local t = ns.db.traceLog or {}
+    ns.db.traceLog = t
+    t[#t + 1] = ("%.1f %s"):format(GetTime(), line)
+    while #t > 300 do table.remove(t, 1) end
 end
 
 function ns.InRange(id, unit)
@@ -278,6 +291,15 @@ local function update(_, elapsed)
             local ok, res = pcall(ns.rotation)
             if ok then s = res elseif ns.db.debug then ns.Print("rotation error: " .. tostring(res)) end
         end
+        if ns.db.trace and ns.TraceState and ns.HostileTarget() then
+            local now = GetTime()
+            local fighting = ns.flag(UnitAffectingCombat("player"))
+            if s ~= ns.suggestion or (fighting and now - (ns.lastTrace or 0) > 1) then
+                ns.lastTrace = now
+                local ok, state = pcall(ns.TraceState)
+                ns.Trace(("%s | %s"):format(s and C_Spell.GetSpellName(s) or "-", ok and state or ("err " .. tostring(state))))
+            end
+        end
         if s ~= ns.suggestion then
             ns.suggestion = s
             ns.ShowSuggestion(s)
@@ -351,6 +373,7 @@ local HELP = {
     "/frot scale 1.2 - icon size",
     "/frot potions - potion suggestions on/off",
     "/frot debug - print what the addon reads from your buttons",
+    "/frot trace - keep a log of rotation decisions (for bug reports) on/off",
 }
 
 local function toggle(key)
@@ -364,7 +387,7 @@ SLASH_FOREVERROTATION1 = "/frot"
 SLASH_FOREVERROTATION2 = "/foreverrotation"
 SlashCmdList.FOREVERROTATION = function(msg)
     local cmd, arg = (msg or ""):lower():match("^%s*(%S*)%s*(.-)%s*$")
-    if cmd == "labels" or cmd == "glow" or cmd == "icon" or cmd == "potions" then
+    if cmd == "labels" or cmd == "glow" or cmd == "icon" or cmd == "potions" or cmd == "trace" then
         toggle(cmd)
     elseif cmd == "unlock" or cmd == "lock" then
         ns.db.locked = (cmd == "lock")
