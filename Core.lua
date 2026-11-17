@@ -327,6 +327,7 @@ local function update(_, elapsed)
         end
     end
     if elapsedLabels >= (ns.labelsDirty and 0.3 or 1.0) then
+        if ns.labelsDirty and ns.Census then pcall(ns.Census) end
         elapsedLabels = 0
         ns.labelsDirty = false
         ns.RefreshLabels()

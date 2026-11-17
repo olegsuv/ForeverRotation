@@ -6,6 +6,7 @@ if class ~= "HUNTER" then return end
 local SERPENT_STING, HUNTERS_MARK, ARCANE_SHOT, MULTI_SHOT = 1978, 1130, 3044, 2643
 local AIMED_SHOT, RAPID_FIRE, RAPTOR_STRIKE, MONGOOSE_BITE = 19434, 3045, 2973, 1495
 local WING_CLIP, CONCUSSIVE_SHOT, AUTO_SHOT = 2974, 5116, 75
+local DISENGAGE, IMMOLATION_TRAP, EXPLOSIVE_TRAP = 781, 13795, 13813
 local SUMMON_HAWK, SNIPER_SHOT = 1293241, 1310687
 local ASPECT_HAWK, ASPECT_MONKEY, ASPECT_CHEETAH, ASPECT_PACK, ASPECT_BEAST, ASPECT_WILD = 13165, 13163, 5118, 13159, 13161, 20043
 
@@ -29,6 +30,20 @@ local function name(id) return C_Spell.GetSpellName(id) end
 local function dps(baseID, targets)
     local _, id = ns.Spell(baseID)
     return id and ns.DPS(id, targets) or 0
+end
+
+-- the target is hitting you (not your pet): true / false / nil (hidden)
+local function targetOnMe()
+    local onMe = ns.flag(ns.safe(UnitIsUnit, "targettarget", "player"))
+    if onMe ~= nil then return onMe end
+    local threat = ns.num(ns.safe(UnitThreatSituation, "player", "target"))
+    if threat then return threat >= 2 end
+    return nil
+end
+
+local function petAlive()
+    if not UnitExists("pet") then return false end
+    return ns.flag(ns.safe(UnitIsDead, "pet")) ~= true
 end
 
 -- not enough mana for a basic shot (the game hides mana numbers in combat)
@@ -61,8 +76,23 @@ local function rotation()
     -- so the zone comes from Wing Clip / Mongoose Bite / interact distance)
     local zone = ns.RangeZone()
     if zone == "melee" then
+        local onMe = targetOnMe()
+        local hp = ns.Percent("target")
         local ok, id = ns.Ready(MONGOOSE_BITE); if ok then return id end
+        -- you have the aggro and a pet: hand the mob to the pet
+        if onMe == true and petAlive() then
+            ok, id = ns.Ready(DISENGAGE); if ok then return id end
+        end
+        -- a trap under the mob while it stands on you (all traps share a cooldown)
+        if not hp or hp >= 40 or ns.TargetIsTough() then
+            ok, id = ns.Ready(EXPLOSIVE_TRAP); if ok then return id end
+            ok, id = ns.Ready(IMMOLATION_TRAP); if ok then return id end
+        end
         ok, id = ns.Ready(RAPTOR_STRIKE); if ok then return id end
+        -- slow it so you can step back to shooting range
+        if onMe ~= false then
+            ok, id = ns.Ready(WING_CLIP); if ok then return id end
+        end
         return nil
     end
 
@@ -83,6 +113,11 @@ local function rotation()
 
     local hp = ns.Percent("target")
     local tough = ns.TargetIsTough()
+
+    -- the mob is coming for you (not the pet): slow it before it reaches melee
+    if targetOnMe() == true and zone == "shoot" then
+        local ok, id = ns.Ready(CONCUSSIVE_SHOT, true); if ok then return id end
+    end
 
     -- Hunter's Mark on targets that will live a while
     if not ns.DebuffUp(name(HUNTERS_MARK)) and (not hp or hp >= 50 or tough) then

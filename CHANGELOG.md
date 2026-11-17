@@ -1,3 +1,8 @@
+## 0.2.7
+
+- Hunter in melee: Mongoose Bite, Disengage when the mob is on you and your pet is up, Immolation/Explosive Trap, Raptor Strike, then Wing Clip to step back.
+- Hunter at range: Concussive Shot when the mob runs at you.
+
 ## 0.2.6
 
 - Fixed: Aspect of the Hawk was suggested while active (player auras are hidden in combat; the last known aspect is now remembered, also across /reload).

@@ -88,6 +88,20 @@ function ns.InitButtons()
     if ns.InitDamage then ns.InitDamage() end
 end
 
+-- what is on the bars (saved, for remote debugging)
+function ns.Census()
+    local out = {}
+    for _, b in ipairs(buttons) do
+        if b:IsVisible() then
+            local id = spellOf(b)
+            if id then
+                out[#out + 1] = ("%s %s(%d)"):format(b:GetName() or "?", tostring(C_Spell.GetSpellName(id)), id)
+            end
+        end
+    end
+    ns.db.bars = out
+end
+
 function ns.RefreshLabels()
     local enemies
     for _, b in ipairs(buttons) do
