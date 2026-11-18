@@ -1,6 +1,6 @@
 ## Interface: 16001
 ## Title: Forever Rotation
-## Notes: Next-spell suggestion for Hunters and damage-per-second numbers on your action buttons (WoW Forever).
+## Notes: Next-spell suggestion for every class and damage-per-second numbers on your action buttons (WoW Forever).
 ## Author: olegsuv
 ## Version: @project-version@
 ## SavedVariables: ForeverRotationDB
@@ -15,5 +15,13 @@ Core.lua
 Damage.lua
 Buttons.lua
 Hunter.lua
+Warrior.lua
+Rogue.lua
+Mage.lua
+Warlock.lua
+Priest.lua
+Paladin.lua
+Shaman.lua
+Druid.lua
 Zone.lua
 Options.lua

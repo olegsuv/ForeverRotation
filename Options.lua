@@ -31,13 +31,15 @@ local function build()
     win:AddSlider("Square size", 0.5, 2, 0.1, function() return db.iconScale end,
         function(v) db.iconScale = v; ns.UpdateIconLock() end, function(v) return ("%.1fx"):format(v) end)
 
-    win:AddHeader("Potions (Hunter)")
+    win:AddHeader("Potions and self-heals")
     win:AddCheck("Suggest a potion when low", function() return db.potions end,
         function(v) db.potions = v end)
     win:AddSlider("Mana potion below", 5, 50, 5, function() return db.potionMana end,
         function(v) db.potionMana = v end, pct)
     win:AddSlider("Healing potion below", 10, 60, 5, function() return db.potionHealth end,
         function(v) db.potionHealth = v end, pct)
+    win:AddSlider("Self-heal spell below (healers, hybrids)", 10, 70, 5, function() return db.selfHeal end,
+        function(v) db.selfHeal = v end, pct)
 
     win:AddHeader("Other")
     win:AddCheck("Minimap button", function() return not db.minimapHide end,

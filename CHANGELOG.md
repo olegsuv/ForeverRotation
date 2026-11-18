@@ -1,3 +1,19 @@
+## 0.4.0
+
+Next-spell suggestions for all classes, built from the Forever leveling and spec guides
+(Maxroll, Mobalytics, Wowhead, Icy Veins). Only the Hunter has been played with the addon so far:
+please report anything odd on CurseForge or GitHub (`/frot trace` keeps a log for bug reports).
+- Warrior: Battle Shout, Charge / Intercept, Victory Rush, Execute / Overpower / Revenge when they light up, Mortal Strike / Bloodthirst / Shield Slam, Rend, Whirlwind, Thunder Clap, Sunder and Demoralizing Shout on elites, Heroic Strike / Cleave with spare rage, Pummel / Shield Bash on casts.
+- Rogue (Combat): stealth openers, Slice and Dice, Shank, Sinister Strike to 5 combo points, Eviscerate, Adrenaline Rush / Blade Flurry / Cold Blood, Riposte, Kick, Evasion.
+- Mage: Frost / Fire / Arcane by your talents; armor and Arcane Intellect, Frost Nova when a mob reaches you, Ice Lance on frozen targets, Pyroblast and Missiles procs, Counterspell, Evocation, wand when dry.
+- Warlock: Banes and DoTs on mobs that live, Immolate / Conflagrate / Shadowburn, Wrack, Shadow Bolt on Shadow Trance, Life Tap, Drain Life when low, Drain Soul for shards, Demon Skin / Armor.
+- Priest: Inner Fire / Fortitude, Shield before the mob reaches you, Shadow Word: Pain, Mind Blast, Devouring Plague, Vampiric Embrace, Shadow Word: Death, Mind Flay / Holy Fire / Smite, self-heals.
+- Paladin (Retribution): aura and Blessing of Might, Crusader -> Judgement on elites, damage seal, Judgement on cooldown, Holy / Crusader Strike, Hammer of Wrath, Exorcism on Undead and Demons, Consecration, Hammer of Justice on casts, emergency heals.
+- Shaman: weapon imbue and Lightning Shield, Lightning Bolt pull, Stormstrike / Rage of the Farseer, Maelstrom Lightning Bolt, totems, Flame / Earth Shock, Lava Burst, Chain Lightning, interrupts, self-heals.
+- Druid: cat (Faerie Fire, Rake, Claw, Rip, Ferocious Bite, Shifting Power), bear (Maul, Swipe, Roar, Enrage) and caster / Moonkin (Moonfire, Insect Swarm, Starfire, Wrath), Mark of the Wild / Thorns, self-heals.
+- Shared: proc glows on your bars push the spell up, interrupts when the target casts, self-buffs remembered while the game hides your auras in combat, combo points counted when hidden.
+- Settings: "Self-heal spell below" slider.
+
 ## 0.3.0
 
 Hunter priority rebuilt from the Forever leveling and spec guides:

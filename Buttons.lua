@@ -43,6 +43,18 @@ function ns.ButtonActive(name)
     return false
 end
 
+-- the game's proc glow on a button with this spell
+function ns.ButtonGlow(name)
+    for _, b in ipairs(buttons) do
+        local id = spellOf(b)
+        if id and C_Spell.GetSpellName(id) == name then
+            local alert = b.SpellActivationAlert or b.overlay
+            if alert and alert.IsShown and alert:IsShown() then return true end
+        end
+    end
+    return false
+end
+
 local function makeGlow(b)
     local g = CreateFrame("Frame", nil, b)
     g:SetPoint("TOPLEFT", -2, 2)

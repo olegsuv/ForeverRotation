@@ -43,7 +43,7 @@ driver:SetScript("OnUpdate", function(_, e)
     if d and anchorToPlate() then
         f.tex:SetTexture(d[1])
         f:SetBackdropBorderColor(d[2], d[3], d[4], 1)
-        f.label:SetText(d[5])
+        f.label:SetText((ns.zoneText and ns.zoneText[z]) or d[5])
         f.label:SetTextColor(d[2], d[3], d[4])
         f:Show()
     else

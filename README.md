@@ -4,11 +4,23 @@
 
 Small helper for **WoW Forever** (Interface 16001):
 
-- **Next-spell suggestion for Hunters**: highlights the button on your bars and shows a square between
-  your unit frames with the spell, your key bind and its damage.
-  Multi-Shot on 2+ enemies, no Serpent Sting on mechanicals or dying trash, Hunter's Mark only on
-  targets that will live, Aimed Shot vs Multi-Shot picked by damage, mana/healing potion when low,
-  and a reminder to switch to Aspect of the Hawk when you shoot in Cheetah.
+- **Next-spell suggestion for every class**: highlights the button on your bars and shows a square
+  between your unit frames with the spell, your key bind and its damage. Priorities follow the Forever
+  leveling guides:
+  - **Hunter** – Mark and Sting only on mobs that live, Aimed Shot vs Multi-Shot by damage, hawks,
+    melee weaving, aspect reminder, range zone icon by the nameplate.
+  - **Warrior** – Shout, Charge, Victory Rush, Execute / Overpower / Revenge, Mortal Strike / Bloodthirst,
+    Rend, AoE on packs, Heroic Strike only with spare rage, interrupts.
+  - **Rogue** – openers, Slice and Dice, Shank, Sinister Strike to 5 points, Eviscerate, cooldowns, Kick.
+  - **Mage** – Frost / Fire / Arcane, Frost Nova when caught, Ice Lance on frozen, procs, Evocation, wand.
+  - **Warlock** – Banes and DoTs, Immolate / Conflagrate / Shadowburn, Wrack, Life Tap, Drain Life / Soul.
+  - **Priest** – Shield, Pain, Mind Blast, Devouring Plague, Mind Flay / Smite, self-heals.
+  - **Paladin** – aura, Might, seals and Judgement, Holy / Crusader Strike, Exorcism, Consecration.
+  - **Shaman** – imbue, Lightning Shield, Stormstrike, Maelstrom bolts, totems, shocks, Lava Burst.
+  - **Druid** – cat, bear and caster / Moonkin rotations, Mark of the Wild, self-heals.
+
+  Mana / healing potions and self-heal spells when you're low. Only the Hunter has been tested in
+  game so far – reports for the other classes are very welcome (`/frot trace` logs decisions).
 - **Damage-per-second numbers on your action buttons** (any class): expected damage of one press
   divided by the time it costs you. Instant spells count as one global cooldown (1.5 s); cast-time
   spells count their cast. Read from the spell's tooltip plus your weapon damage, attack power and crit.

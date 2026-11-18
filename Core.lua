@@ -12,6 +12,7 @@ ns.DEFAULTS = {
     potionHealth = 30, -- suggest a healing potion below this % health (in combat)
     zone = false,      -- Hunter: range zone (melee / dead zone / shoot / too far) under the square
     zonePlate = true,  -- Hunter: the same zone as an icon next to the target's nameplate
+    selfHeal = 35,     -- healers / hybrids: suggest a self-heal below this % health
     trace = true,      -- keep a short log of rotation decisions in SavedVariables (debug)
 }
 
@@ -218,6 +219,303 @@ function ns.PlayerBuff(name)
     return false
 end
 
+---------------------------------------------------------------------------
+-- Shared helpers for the class modules
+---------------------------------------------------------------------------
+
+-- first function that answers ok, id wins
+function ns.first(...)
+    for i = 1, select("#", ...) do
+        local f = select(i, ...)
+        local ok, id = f()
+        if ok then return id end
+    end
+end
+
+-- R(id or name [, checkRange]): ready by base spell id (any rank) or by name
+function ns.R(spell, checkRange)
+    if type(spell) == "number" then return ns.Ready(spell, checkRange) end
+    return ns.ReadyName(spell, checkRange)
+end
+
+-- name of a base spell id (Forever renames some: Curse of Agony -> Bane of Agony)
+function ns.N(spell)
+    if type(spell) == "string" then return spell end
+    return ns.safe(C_Spell.GetSpellName, spell)
+end
+
+-- do we know this spell (id or name)?
+function ns.Known(spell)
+    local n = ns.N(spell)
+    return n and ns.known[n] and true or false
+end
+
+-- raw power value, nil when hidden
+function ns.Power(powerType)
+    local v = ns.num(ns.safe(UnitPower, "player", powerType))
+    return v
+end
+
+-- the spell's own resource is short (rage, energy, mana): true / false
+function ns.NoResource(spell)
+    local n = ns.N(spell)
+    local id = n and ns.known[n]
+    if not id then return false end
+    local _, noMana = ns.Usable(id)
+    return noMana == true
+end
+
+-- the spell glows on your bars (procs: Overpower, Hot Streak, Shadow Trance, Maelstrom...)
+function ns.Proc(spell)
+    local n = ns.N(spell)
+    local id = n and ns.known[n]
+    if not id then return false end
+    local api = (C_SpellActivationOverlay and C_SpellActivationOverlay.IsSpellOverlayed) or IsSpellOverlayed
+    if api and ns.flag(ns.safe(api, id)) then return true end
+    return ns.ButtonGlow and ns.ButtonGlow(n) or false
+end
+
+-- target is casting something we can interrupt: true / false / nil (hidden)
+function ns.TargetCasting()
+    if not UnitCastingInfo then return nil end
+    local spell, _, _, _, _, _, _, notInterruptible = ns.safe(UnitCastingInfo, "target")
+    if spell == nil and UnitChannelInfo then
+        local s2, _, _, _, _, _, ni2 = ns.safe(UnitChannelInfo, "target")
+        spell, notInterruptible = s2, ni2
+    end
+    if spell == nil then return false end
+    if isSecret(spell) then return nil end
+    if notInterruptible ~= nil and not isSecret(notInterruptible) and notInterruptible then return false end
+    return true
+end
+
+-- the target is hitting you: true / false / nil (hidden)
+function ns.TargetOnMe()
+    local onMe = ns.flag(ns.safe(UnitIsUnit, "targettarget", "player"))
+    if onMe ~= nil then return onMe end
+    local threat = ns.num(ns.safe(UnitThreatSituation, "player", "target"))
+    if threat then return threat >= 2 end
+    return nil
+end
+
+-- creature type of the target, nil when hidden
+function ns.TargetType()
+    local t = ns.safe(UnitCreatureType, "target")
+    if t and not isSecret(t) then return t end
+end
+
+local BLEED_IMMUNE = { Mechanical = true, Elemental = true, ["Механизм"] = true, ["Элементаль"] = true }
+function ns.CanBleed()
+    local t = ns.TargetType()
+    return not (t and BLEED_IMMUNE[t])
+end
+
+-- the mob lives long enough for a DoT / buildup: not low, or elite / player
+function ns.Lives(threshold)
+    local hp = ns.Percent("target")
+    return not hp or hp >= (threshold or 40) or ns.TargetIsTough()
+end
+
+-- in melee: first probe spell that answers, else interact distance (~10 yd)
+function ns.InMelee(probes)
+    for _, p in ipairs(probes or {}) do
+        local n = ns.N(p)
+        local id = n and ns.known[n]
+        if id then
+            local r = ns.InRange(id)
+            if r ~= nil then return r end
+        end
+    end
+    return ns.flag(ns.safe(CheckInteractDistance, "target", 3))
+end
+
+-- current shapeshift / stance / paladin aura: its spell name, "" = none, nil = hidden
+function ns.Form()
+    local idx = ns.num(ns.safe(GetShapeshiftForm))
+    if idx == nil then return nil end
+    if idx == 0 then return "" end
+    local _, active, _, spellID = ns.safe(GetShapeshiftFormInfo, idx)
+    if spellID and not isSecret(spellID) then return ns.safe(C_Spell.GetSpellName, spellID) or "" end
+    return nil
+end
+
+-- main hand imbue (shaman weapons, rogue poisons): true / false / nil
+function ns.WeaponEnchanted()
+    if not GetWeaponEnchantInfo then return nil end
+    local has = ns.safe(GetWeaponEnchantInfo)
+    if has == nil or isSecret(has) then return nil end
+    return has and true or false
+end
+
+---------------------------------------------------------------------------
+-- Timed self-buffs (Battle Shout, Slice and Dice, seals, shields, armors).
+-- The game hides player auras in combat: remember what we last read and when
+-- we cast them. Answer true / false / nil (we really don't know).
+---------------------------------------------------------------------------
+ns.selfBuffs = {} -- [name] = duration in seconds
+ns.buffGroups = {} -- [name] = group (casting one drops the others: seals, armors)
+local buffExp -- [name] = expire time (GetTime based), saved in db
+
+function ns.SelfBuff(spell)
+    local name = ns.N(spell)
+    if not name then return nil end
+    buffExp = buffExp or (ns.db and ns.db.buffExp) or {}
+    local id = ns.known[name]
+    if id and C_Spell.IsCurrentSpell and ns.flag(ns.safe(C_Spell.IsCurrentSpell, id)) then return true end
+    if ns.ButtonActive and ns.ButtonActive(name) then return true end
+    if C_UnitAuras and C_UnitAuras.GetAuraDataBySpellName then
+        local ok, aura = pcall(C_UnitAuras.GetAuraDataBySpellName, "player", name, "HELPFUL")
+        if ok and not isSecret(aura) then
+            if aura == nil then buffExp[name] = 0; return false end
+            local exp = aura.expirationTime
+            if exp ~= nil and not isSecret(exp) and exp > 0 then buffExp[name] = exp
+            else buffExp[name] = GetTime() + 3600 end
+            return true
+        end
+    end
+    local e = buffExp[name]
+    if e == nil then return nil end
+    return e > GetTime()
+end
+
+-- missing for sure (or never seen while it's a buff you keep up)
+function ns.BuffMissing(spell)
+    if not ns.Known(spell) then return false end
+    return ns.SelfBuff(spell) == false
+end
+
+---------------------------------------------------------------------------
+-- Combo points: the real number when readable, else counted from your casts
+---------------------------------------------------------------------------
+ns.cpBuilders = {} -- [name] = points it gives
+ns.cpFinishers = {} -- [name] = true
+local cpEst = 0
+
+function ns.ComboPoints()
+    local v = ns.num(ns.safe(UnitPower, "player", (Enum.PowerType and Enum.PowerType.ComboPoints) or 4))
+    if v == nil and GetComboPoints then v = ns.num(ns.safe(GetComboPoints, "player", "target")) end
+    if v ~= nil then cpEst = v; return v end
+    return cpEst
+end
+
+local function trackCast(name)
+    local now = GetTime()
+    buffExp = buffExp or (ns.db and ns.db.buffExp) or {}
+    local dur = ns.selfBuffs[name]
+    if dur then
+        local g = ns.buffGroups[name]
+        if g then
+            for other, og in pairs(ns.buffGroups) do
+                if og == g and other ~= name then buffExp[other] = 0 end
+            end
+        end
+        if type(dur) == "function" then dur = dur() end
+        buffExp[name] = now + dur
+    end
+    if ns.cpFinishers[name] then cpEst = 0
+    elseif ns.cpBuilders[name] then cpEst = math.min(5, cpEst + ns.cpBuilders[name]) end
+end
+ns.ResetComboEstimate = function() cpEst = 0 end
+
+---------------------------------------------------------------------------
+-- Potions and self-heals shared by the class modules
+---------------------------------------------------------------------------
+ns.MANA_POTIONS = { 13444, 13443, 6149, 3827, 3385, 2455 }
+ns.HEAL_POTIONS = { 13446, 3928, 1710, 929, 858, 118 }
+
+-- usesMana: the class runs on mana
+function ns.PotionCheck(usesMana)
+    if not ns.db.potions then return nil end
+    if not ns.flag(UnitAffectingCombat("player")) then return nil end
+    local hp = ns.Percent("player")
+    if hp and hp < ns.db.potionHealth then
+        local s = ns.ReadyItem(ns.HEAL_POTIONS); if s then return s end
+    end
+    if usesMana then
+        local mana = ns.Percent("player", Enum.PowerType.Mana)
+        if mana and mana < ns.db.potionMana then
+            local s = ns.ReadyItem(ns.MANA_POTIONS); if s then return s end
+        end
+    end
+end
+
+-- you are low: true when health readable and under the heal threshold
+function ns.LowHealth(pct)
+    local hp = ns.Percent("player")
+    return hp ~= nil and hp < (pct or ns.db.selfHeal or 40)
+end
+
+-- mana (percent) or nil; manaShort: below pct, or the main spell says "no mana"
+function ns.ManaShort(pct, mainSpell)
+    local mana = ns.Percent("player", Enum.PowerType.Mana)
+    if mana then return mana < pct end
+    return mainSpell and ns.NoResource(mainSpell) or false
+end
+
+-- a hits harder per second than b (instants counted as a global cooldown)
+function ns.Better(a, b, targets)
+    local na, nb = ns.N(a), ns.N(b)
+    local ia, ib = na and ns.known[na], nb and ns.known[nb]
+    if not ia then return false end
+    if not ib then return true end
+    return (ns.DPS(ia, targets) or 0) >= (ns.DPS(ib, targets) or 0)
+end
+
+-- wand: Shoot when a wand is equipped
+function ns.Wand()
+    if HasWandEquipped and not ns.flag(ns.safe(HasWandEquipped)) then return false end
+    return ns.R(5019, true)
+end
+
+---------------------------------------------------------------------------
+-- Defaults that class modules can replace
+---------------------------------------------------------------------------
+ns.meleeProbes = nil -- spells to test melee range with
+ns.rangeProbes = nil -- spells to test casting range with
+ns.traceSpells = {}  -- spells to show in the trace log
+
+function ns.RangeZone()
+    if not ns.HostileTarget() then return nil end
+    if ns.meleeProbes then
+        if ns.InMelee(ns.meleeProbes) == true then return "melee" end
+    end
+    if ns.rangeProbes then
+        for _, p in ipairs(ns.rangeProbes) do
+            local n = ns.N(p)
+            local id = n and ns.known[n]
+            if id then
+                local r = ns.InRange(id)
+                if r == true then return "shoot" end
+                if r == false then return "far" end
+            end
+        end
+    end
+    if ns.meleeProbes and ns.InMelee(ns.meleeProbes) == false then return "far" end
+    return nil
+end
+
+function ns.TraceState()
+    local out = {}
+    local pt = UnitPowerType and ns.num(ns.safe(UnitPowerType, "player"))
+    local p = pt and ns.Percent("player", pt)
+    out[#out + 1] = ("pow=%s"):format(p and ("%d"):format(p) or "?")
+    if next(ns.cpBuilders) then out[#out + 1] = "cp=" .. tostring(ns.ComboPoints()) end
+    out[#out + 1] = "form=" .. tostring(ns.Form())
+    out[#out + 1] = ("en=%d"):format(ns.EnemyCount())
+    for _, s in ipairs(ns.traceSpells) do
+        local n = ns.N(s)
+        local id = n and ns.known[n]
+        if id then
+            local u = ns.Usable(id)
+            local r = ns.InRange(id)
+            out[#out + 1] = ("%s:u%s/cd%s/r%s"):format(n:sub(1, 6), u and 1 or 0, ns.OnCooldown(id) and 1 or 0,
+                r == nil and "?" or (r and 1 or 0))
+        end
+    end
+    out[#out + 1] = "zone=" .. tostring(ns.RangeZone())
+    return table.concat(out, " ")
+end
+
 -- recent casts by name (to count summons such as Summon Hawk)
 local castLog = {}
 function ns.RecentCasts(name, window)
@@ -237,6 +535,7 @@ local function onCast(spellID)
     castLog[name] = list
     list[#list + 1] = GetTime()
     if #list > 10 then table.remove(list, 1) end
+    trackCast(name)
     if ns.exclusiveBuffs[name] then
         lastExclusive = name
         if ns.db then ns.db.lastAspect = name end
@@ -368,6 +667,7 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
             if ForeverRotationDB[k] == nil then ForeverRotationDB[k] = v end
         end
         ns.db = ForeverRotationDB
+        ns.db.buffExp = ns.db.buffExp or {}
         lastExclusive = ns.db.lastAspect
         if not ns.db.migratedZoneText then -- 0.2.6: zone text under the square off, icon by the nameplate instead
             ns.db.zone = false
@@ -388,6 +688,7 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
         onCast(arg3)
     elseif event == "PLAYER_TARGET_CHANGED" then
         applied["target"] = nil
+        ns.ResetComboEstimate()
         ns.labelsDirty = true
     elseif event == "NAME_PLATE_UNIT_ADDED" then
         plates[arg1] = true
@@ -397,6 +698,7 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
         wipe(applied)
         lastExclusive = nil
         ns.db.lastAspect = nil
+        wipe(ns.db.buffExp)
     else
         ns.labelsDirty = true
     end
