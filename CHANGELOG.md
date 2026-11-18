@@ -1,3 +1,7 @@
+## 0.4.1
+
+- The settings window and the minimap button tooltip show the loaded version.
+
 ## 0.4.0
 
 Next-spell suggestions for all classes, built from the Forever leveling and spec guides
