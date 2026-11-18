@@ -240,5 +240,6 @@ function ns.InitClass()
     if mark then ns.durations[mark] = 120 end
     local sting = name(SERPENT_STING)
     if sting then ns.durations[sting] = 15 end
+    ns.zoneUseful = true
     ns.rotation = rotation
 end

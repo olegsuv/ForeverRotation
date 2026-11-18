@@ -10,8 +10,8 @@ ns.DEFAULTS = {
     potions = true,
     potionMana = 15,   -- suggest a mana potion below this % mana (in combat)
     potionHealth = 30, -- suggest a healing potion below this % health (in combat)
-    zone = false,      -- Hunter: range zone (melee / dead zone / shoot / too far) under the square
-    zonePlate = true,  -- Hunter: the same zone as an icon next to the target's nameplate
+    zone = false,      -- range zone (melee / dead zone / shoot / too far) under the square (not for pure melee)
+    zonePlate = true,  -- the same zone as an icon next to the target's nameplate (not for pure melee)
     selfHeal = 35,     -- healers / hybrids: suggest a self-heal below this % health
     trace = true,      -- keep a short log of rotation decisions in SavedVariables (debug)
 }
@@ -263,6 +263,17 @@ function ns.NoResource(spell)
     if not id then return false end
     local _, noMana = ns.Usable(id)
     return noMana == true
+end
+
+-- known and off cooldown, only short of its resource: the spell to wait for (rage, energy)
+function ns.Pool(spell, checkRange)
+    local n = ns.N(spell)
+    local id = n and ns.known[n]
+    if not id or ns.OnCooldown(id) then return false end
+    if checkRange and ns.InRange(id) == false then return false end
+    local usable, noMana = ns.Usable(id)
+    if not usable and noMana == true then return true, id end
+    return false
 end
 
 -- the spell glows on your bars (procs: Overpower, Hot Streak, Shadow Trance, Maelstrom...)
@@ -676,6 +687,8 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
     elseif event == "PLAYER_LOGIN" then
         ns.ScanSpellbook()
         if ns.InitClass then ns.InitClass() end
+        -- the range zone means something only when you also fight from range (not pure melee)
+        if ns.zoneUseful == nil then ns.zoneUseful = ns.rangeProbes ~= nil end
         ns.InitButtons()
         ns.InitIcon()
         ns.InitTooltip()

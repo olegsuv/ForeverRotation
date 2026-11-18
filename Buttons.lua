@@ -217,8 +217,15 @@ function ns.InitIcon()
     icon.dmg = icon:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
     icon.dmg:SetPoint("BOTTOMLEFT", 2, 2)
     icon.dmg:SetTextColor(1, 0.85, 0.2)
-    icon.elapsed = 0
+    icon.elapsed, icon.tint = 0, 0
     icon:SetScript("OnUpdate", function(self, e)
+        self.tint = self.tint + e
+        if self.tint > 0.15 then -- blue while you wait for rage / energy / mana, like the action bars
+            self.tint = 0
+            local _, noMana
+            if ns.suggestion then _, noMana = ns.Usable(ns.suggestion) end
+            if noMana then self.tex:SetVertexColor(0.5, 0.5, 1) else self.tex:SetVertexColor(1, 1, 1) end
+        end
         self.elapsed = self.elapsed + e
         if self.elapsed > 1 then -- unit frames can move (EasyFrames etc.)
             self.elapsed = 0
@@ -244,7 +251,7 @@ function ns.InitIcon()
         self.elapsed = self.elapsed + e
         if self.elapsed < 0.2 then return end
         self.elapsed = 0
-        local z = ns.db.zone and ns.db.icon and ns.RangeZone and ns.RangeZone()
+        local z = ns.db.zone and ns.db.icon and ns.zoneUseful and ns.RangeZone and ns.RangeZone()
         local d = z and ZONES[z]
         if d then
             self.text:SetText(d[1])

@@ -1,3 +1,12 @@
+## 0.5.0
+
+- Warrior: Heroic Strike with any spare rage until you learn Mortal Strike / Bloodthirst / Shield Slam (was 60 rage, so the square stayed empty most of the fight).
+- Warrior: tank priority in Defensive Stance (or with a shield in a group): Taunt / Mocking Blow, Revenge, Shield Slam, Shield Block, Thunder Clap / Demoralizing Shout, Sunder Armor, Heroic Strike / Cleave.
+- Warrior: short of rage, the square shows the next strike to wait for, tinted blue (any class: the square turns blue while you lack the resource).
+- Warrior: next to the mob before the fight, the opener is suggested instead of nothing.
+- The range zone (MELEE / TOO FAR) is no longer shown for pure melee classes (Warrior, Rogue, Paladin).
+- Settings window: "More Forever addons" with a link to each Forever addon you don't have yet (nothing shown when you have them all).
+
 ## 0.4.1
 
 - The settings window and the minimap button tooltip show the loaded version.

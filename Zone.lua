@@ -37,7 +37,7 @@ driver:SetScript("OnUpdate", function(_, e)
     elapsed = elapsed + e
     if elapsed < 0.2 then return end
     elapsed = 0
-    if not ns.db or not ns.db.zonePlate or not ns.RangeZone then f:Hide(); return end
+    if not ns.db or not ns.db.zonePlate or not ns.zoneUseful or not ns.RangeZone then f:Hide(); return end
     local z = ns.RangeZone()
     local d = z and ZONES[z]
     if d and anchorToPlate() then
