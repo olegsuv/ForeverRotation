@@ -24,4 +24,5 @@ Paladin.lua
 Shaman.lua
 Druid.lua
 Zone.lua
+Aggro.lua
 Options.lua

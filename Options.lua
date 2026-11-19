@@ -42,6 +42,8 @@ local function build()
         function(v) db.selfHeal = v end, pct)
 
     win:AddHeader("Other")
+    win:AddCheck("Collect aggro data (distance and level when mobs aggro)", function() return db.aggroLog end,
+        function(v) db.aggroLog = v end)
     win:AddCheck("Minimap button", function() return not db.minimapHide end,
         function(v) db.minimapHide = not v; mini:UpdateShown() end)
     win:AddButtons({

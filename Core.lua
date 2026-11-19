@@ -14,6 +14,7 @@ ns.DEFAULTS = {
     zonePlate = true,  -- the same zone as an icon next to the target's nameplate (not for pure melee)
     selfHeal = 35,     -- healers / hybrids: suggest a self-heal below this % health
     trace = true,      -- keep a short log of rotation decisions in SavedVariables (debug)
+    aggroLog = true,   -- log at what distance / level mobs aggro on you (data for an aggro indicator)
 }
 
 local GetTime, pcall, ipairs, pairs, type = GetTime, pcall, ipairs, pairs, type
@@ -366,6 +367,18 @@ end
 ns.selfBuffs = {} -- [name] = duration in seconds
 ns.buffGroups = {} -- [name] = group (casting one drops the others: seals, armors)
 local buffExp -- [name] = expire time (GetTime based), saved in db
+local castExp = {} -- [name] = expire time counted from your own cast
+
+-- the aura by name, else by the spell id (on Forever the aura name can differ from the spell's)
+local function playerAura(name, id)
+    local ok, aura = pcall(C_UnitAuras.GetAuraDataBySpellName, "player", name, "HELPFUL")
+    if not ok or isSecret(aura) then return false, nil end
+    if aura == nil and id and C_UnitAuras.GetPlayerAuraBySpellID then
+        local ok2, a2 = pcall(C_UnitAuras.GetPlayerAuraBySpellID, id)
+        if ok2 and not isSecret(a2) then aura = a2 end
+    end
+    return true, aura
+end
 
 function ns.SelfBuff(spell)
     local name = ns.N(spell)
@@ -375,9 +388,14 @@ function ns.SelfBuff(spell)
     if id and C_Spell.IsCurrentSpell and ns.flag(ns.safe(C_Spell.IsCurrentSpell, id)) then return true end
     if ns.ButtonActive and ns.ButtonActive(name) then return true end
     if C_UnitAuras and C_UnitAuras.GetAuraDataBySpellName then
-        local ok, aura = pcall(C_UnitAuras.GetAuraDataBySpellName, "player", name, "HELPFUL")
-        if ok and not isSecret(aura) then
-            if aura == nil then buffExp[name] = 0; return false end
+        local ok, aura = playerAura(name, id)
+        if ok then
+            if aura == nil then
+                -- you cast it a moment ago and the game finds no such aura: believe the cast
+                if (castExp[name] or 0) > GetTime() then return true end
+                buffExp[name] = 0
+                return false
+            end
             local exp = aura.expirationTime
             if exp ~= nil and not isSecret(exp) and exp > 0 then buffExp[name] = exp
             else buffExp[name] = GetTime() + 3600 end
@@ -417,11 +435,12 @@ local function trackCast(name)
         local g = ns.buffGroups[name]
         if g then
             for other, og in pairs(ns.buffGroups) do
-                if og == g and other ~= name then buffExp[other] = 0 end
+                if og == g and other ~= name then buffExp[other] = 0; castExp[other] = nil end
             end
         end
         if type(dur) == "function" then dur = dur() end
         buffExp[name] = now + dur
+        castExp[name] = now + dur
     end
     if ns.cpFinishers[name] then cpEst = 0
     elseif ns.cpBuilders[name] then cpEst = math.min(5, cpEst + ns.cpBuilders[name]) end
@@ -743,6 +762,7 @@ local HELP = {
     "/frot potions - potion suggestions on/off",
     "/frot debug - print what the addon reads from your buttons",
     "/frot trace - keep a log of rotation decisions (for bug reports) on/off",
+    "/frot aggro - what the aggro log has collected so far",
 }
 
 local function toggle(key)
@@ -767,6 +787,8 @@ SlashCmdList.FOREVERROTATION = function(msg)
         ns.UpdateIconLock()
     elseif cmd == "debug" then
         ns.Debug()
+    elseif cmd == "aggro" then
+        if ns.AggroStats then ns.AggroStats() end
     elseif cmd == "" or cmd == "config" or cmd == "options" then
         if ns.ToggleOptions then ns.ToggleOptions() end
     else

@@ -1,3 +1,9 @@
+## 0.5.1
+
+- Warrior (and every class with a timed self-buff): a buff you just cast counts as on even when the game reports no such aura (the square no longer sticks on Battle Shout). The aura is also looked up by spell id.
+- Aggro data log (on by default, can be switched off in settings): when a hostile mob aggroes on you by itself, it saves your level, the mob's level, elite or not and the distance just before. Mobs you or your pet pulled are left out. `/frot aggro` shows a summary. This data will drive an aggro-range indicator.
+- Long option labels wrap inside the settings window.
+
 ## 0.5.0
 
 - Warrior: Heroic Strike with any spare rage until you learn Mortal Strike / Bloodthirst / Shield Slam (was 60 rage, so the square stayed empty most of the fight).
