@@ -77,7 +77,7 @@ function ns.InitClass()
     d[n(FLAME_SHOCK) or "Flame Shock"] = 12
     ns.meleeProbes = MELEE
     ns.rangeProbes = { LIGHTNING_BOLT, EARTH_SHOCK }
-    ns.zoneText = { shoot = "IN RANGE" }
+    ns.zoneText = { shoot = "In range" }
     ns.traceSpells = { LIGHTNING_BOLT, EARTH_SHOCK, FLAME_SHOCK, STORMSTRIKE, SEARING_TOTEM, "Lava Burst" }
     ns.rotation = rotation
 end

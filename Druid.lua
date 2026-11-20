@@ -116,7 +116,7 @@ function ns.InitClass()
     d[n(DEMO_ROAR) or "Demoralizing Roar"] = 30
     ns.meleeProbes = { CLAW, MAUL, RAKE }
     ns.rangeProbes = { WRATH, MOONFIRE }
-    ns.zoneText = { shoot = "IN RANGE" }
+    ns.zoneText = { shoot = "In range" }
     ns.traceSpells = { WRATH, MOONFIRE, CLAW, RAKE, BITE, MAUL }
     ns.rotation = rotation
 end

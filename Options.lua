@@ -28,6 +28,8 @@ local function build()
         function(v) db.zone = v end, function() return db.icon end)
     win:AddCheck("Range zone icon by the target's nameplate", function() return db.zonePlate end,
         function(v) db.zonePlate = v end)
+    win:AddCheck("Arrow over it: step back when too close to shoot, step closer when out of reach",
+        function() return db.moveArrow end, function(v) db.moveArrow = v end, function() return db.icon end)
     win:AddSlider("Square size", 0.5, 2, 0.1, function() return db.iconScale end,
         function(v) db.iconScale = v; ns.UpdateIconLock() end, function(v) return ("%.1fx"):format(v) end)
 

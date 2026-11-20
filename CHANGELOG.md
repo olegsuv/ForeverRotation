@@ -1,3 +1,11 @@
+## 0.6.0
+
+- Warlock: curses. On elites, rares and players: Curse of the Elements (else Curse of Weakness while it hits you) once per target, and Bane of Doom instead of Bane of Agony on a tough mob near full health. Only one Bane and one Curse of yours at a time.
+- Hunter out of ammo (or without a ranged weapon): Aspect of the Monkey instead of the Hawk, melee priority (Mongoose Bite, Raptor Strike, traps, Counterattack), no Hunter's Mark; the range zone shows Too far until you're in melee.
+- Arrow over the square (on by default): down = step back (too close to shoot), up = step closer (out of reach). Settings: "Arrow over it".
+- Nameplate range icon: now to the right of the target's nameplate (past the level, clear of the elite icon and raid marks), styled like the level box, with the distance in yards beside it ("20-28 yd") and the zone word above in the plate's own font.
+- Zone words in sentence case ("Melee", "Too close", "In range", "Too far"), also under the square.
+
 ## 0.5.1
 
 - Warrior (and every class with a timed self-buff): a buff you just cast counts as on even when the game reports no such aura (the square no longer sticks on Battle Shout). The aura is also looked up by spell id.

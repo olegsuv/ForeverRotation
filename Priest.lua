@@ -72,7 +72,7 @@ function ns.InitClass()
     d[n(VE) or "Vampiric Embrace"] = 60
     d[n(HOLY_FIRE) or "Holy Fire"] = 10
     ns.rangeProbes = { SMITE, SWP, MIND_BLAST }
-    ns.zoneText = { shoot = "IN RANGE" }
+    ns.zoneText = { shoot = "In range" }
     ns.traceSpells = { SWP, MIND_BLAST, MIND_FLAY, SMITE, PWS, DEVOURING }
     ns.rotation = rotation
 end

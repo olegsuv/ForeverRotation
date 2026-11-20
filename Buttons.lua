@@ -242,10 +242,10 @@ function ns.InitIcon()
     zone.text:SetPoint("CENTER")
     zone.elapsed = 0
     local ZONES = {
-        melee = { "MELEE", 1, 0.5, 0.2 },
-        dead  = { "TOO CLOSE", 1, 0.15, 0.15 },
-        shoot = { "SHOOT", 0.3, 1, 0.3 },
-        far   = { "TOO FAR", 0.6, 0.6, 0.6 },
+        melee = { "Melee", 1, 0.5, 0.2 },
+        dead  = { "Too close", 1, 0.15, 0.15 },
+        shoot = { "Shoot", 0.3, 1, 0.3 },
+        far   = { "Too far", 0.6, 0.6, 0.6 },
     }
     zone:SetScript("OnUpdate", function(self, e)
         self.elapsed = self.elapsed + e
@@ -254,7 +254,7 @@ function ns.InitIcon()
         local z = ns.db.zone and ns.db.icon and ns.zoneUseful and ns.RangeZone and ns.RangeZone()
         local d = z and ZONES[z]
         if d then
-            self.text:SetText(d[1])
+            self.text:SetText((ns.zoneText and ns.zoneText[z]) or d[1])
             self.text:SetTextColor(d[2], d[3], d[4])
             self.text:Show()
         else
@@ -263,6 +263,46 @@ function ns.InitIcon()
         self:SetScale(ns.db.iconScale or 1)
     end)
     ns.zoneFrame = zone
+
+    -- arrow over the square: step back (too close to shoot) or step closer (out of reach)
+    local move = CreateFrame("Frame", "ForeverRotationMoveArrow", UIParent)
+    move:SetSize(26, 26)
+    move:SetFrameStrata("MEDIUM")
+    move:SetPoint("BOTTOM", icon, "TOP", 0, 4)
+    move.tex = move:CreateTexture(nil, "ARTWORK")
+    move.tex:SetAllPoints()
+    local bounce = move:CreateAnimationGroup()
+    bounce:SetLooping("BOUNCE")
+    move.slide = bounce:CreateAnimation("Translation")
+    move.slide:SetDuration(0.4)
+    move.bounce = bounce
+    move:Hide()
+    move.elapsed = 0
+    move:SetScript("OnUpdate", nil)
+    local moveDriver = CreateFrame("Frame")
+    moveDriver:SetScript("OnUpdate", function(_, e)
+        move.elapsed = move.elapsed + e
+        if move.elapsed < 0.2 then return end
+        move.elapsed = 0
+        local hint = ns.db.moveArrow and ns.db.icon and ns.MoveHint and ns.MoveHint()
+        if hint ~= move.hint then
+            move.hint = hint
+            move.bounce:Stop()
+            if hint then
+                local down = hint == "back"
+                move.tex:SetTexture(down and "Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up"
+                    or "Interface\\Buttons\\UI-ScrollBar-ScrollUpButton-Up")
+                move.tex:SetTexCoord(0.2, 0.8, 0.2, 0.8)
+                move.slide:SetOffset(0, down and -5 or 5)
+                move:Show()
+                move.bounce:Play()
+            else
+                move:Hide()
+            end
+        end
+        move:SetScale(ns.db.iconScale or 1)
+    end)
+
     ns.UpdateIconLock()
 end
 

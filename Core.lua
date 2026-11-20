@@ -12,6 +12,7 @@ ns.DEFAULTS = {
     potionHealth = 30, -- suggest a healing potion below this % health (in combat)
     zone = false,      -- range zone (melee / dead zone / shoot / too far) under the square (not for pure melee)
     zonePlate = true,  -- the same zone as an icon next to the target's nameplate (not for pure melee)
+    moveArrow = true,  -- arrow by the square: step back (too close to shoot) / step closer (out of reach)
     selfHeal = 35,     -- healers / hybrids: suggest a self-heal below this % health
     trace = true,      -- keep a short log of rotation decisions in SavedVariables (debug)
     aggroLog = true,   -- log at what distance / level mobs aggro on you (data for an aggro indicator)
@@ -521,6 +522,14 @@ function ns.RangeZone()
         end
     end
     if ns.meleeProbes and ns.InMelee(ns.meleeProbes) == false then return "far" end
+    return nil
+end
+
+-- which way to step: "back" (too close to shoot), "closer" (out of reach) or nil
+function ns.MoveHint()
+    local z = ns.RangeZone and ns.RangeZone()
+    if z == "dead" then return "back" end
+    if z == "far" then return "closer" end
     return nil
 end
 

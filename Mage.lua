@@ -102,7 +102,7 @@ function ns.InitClass()
     ns.selfBuffs[n(ARCANE_INTELLECT) or "Arcane Intellect"] = 1800
     ns.durations[n(FROST_NOVA) or "Frost Nova"] = 8
     ns.rangeProbes = { FROSTBOLT, FIREBALL }
-    ns.zoneText = { shoot = "IN RANGE" }
+    ns.zoneText = { shoot = "In range" }
     ns.traceSpells = { FROSTBOLT, FIREBALL, FIRE_BLAST, "Ice Lance", PYROBLAST, FROST_NOVA }
     ns.rotation = rotation
 end

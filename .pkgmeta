@@ -4,7 +4,7 @@ ignore:
   - README.md
   - .github
   - media/logo.png
-  - media/screenshot-settings.png
+  - media/screenshot-*.png
 
 manual-changelog:
   filename: CHANGELOG.md

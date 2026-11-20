@@ -59,6 +59,19 @@ local function outOfMana()
     return false
 end
 
+-- nothing to shoot: no ranged weapon, or a bow / gun with the ammo slot empty (thrown needs none)
+local RANGED_SLOT, AMMO_SLOT = 18, 0
+local function noAmmo()
+    local ranged = ns.safe(GetInventoryItemID, "player", RANGED_SLOT)
+    if not ranged then return true end
+    local _, _, _, loc = ns.safe(C_Item.GetItemInfoInstant, ranged)
+    if loc == "INVTYPE_THROWN" then return false end
+    local ammo = ns.safe(GetInventoryItemID, "player", AMMO_SLOT)
+    local count = ns.num(ns.safe(GetInventoryItemCount, "player", AMMO_SLOT))
+    return not ammo or count == 0
+end
+ns.HunterNoAmmo = noAmmo
+
 -- Survival-style melee weaving: Strider Kick / Lacerate learned or Aspect of the Beast on
 local function meleeSpec()
     if ns.known["Strider Kick"] or ns.known["Lacerate"] then return true end
@@ -81,7 +94,8 @@ end
   2+ enemies: Multi-Shot instead of Aimed Shot; big packs: Volley (40, no cooldown).
   Melee (Survival weave): Mongoose Bite when lit, Raptor Strike (no global cooldown), Strider Kick,
   Lacerate when not ticking, Immolation Trap on a mob that lives 15 s (traps work in combat, 30 s shared).
-  Melee for ranged specs: hand the mob to the pet (Disengage), trap, Raptor, Wing Clip and step back. ]]
+  Melee for ranged specs: hand the mob to the pet (Disengage), trap, Raptor, Wing Clip and step back.
+  Out of ammo: Aspect of the Monkey (dodge) and the melee strikes, no shots, no stepping back. ]]
 local function rotation()
     local mana = ns.Percent("player", Enum.PowerType.Mana)
     local fighting = ns.flag(UnitAffectingCombat("player"))
@@ -103,9 +117,15 @@ local function rotation()
     local lives = not hp or hp >= 50 or tough -- worth a DoT / mark / hawk
     local melee = meleeSpec()
     local onMe = targetOnMe()
+    local dry = noAmmo()
 
-    -- aspect: Beast for melee weaving, Hawk for shooting
-    if melee then
+    -- aspect: Monkey with nothing to shoot, Beast for melee weaving, Hawk for shooting
+    if dry then
+        local monkey = name(ASPECT_MONKEY)
+        if monkey and ns.known[monkey] and not ns.PlayerBuff(monkey) then
+            local ok, id = ns.Ready(ASPECT_MONKEY); if ok then return id end
+        end
+    elseif melee then
         local beast = name(ASPECT_BEAST)
         if beast and ns.known[beast] and not ns.PlayerBuff(beast) then
             local ok, id = ns.Ready(ASPECT_BEAST); if ok then return id end
@@ -116,6 +136,23 @@ local function rotation()
         if hawk and ns.known[hawk] and not ns.PlayerBuff(hawk) and not (ns.known[falcon] and ns.PlayerBuff(falcon)) then
             local ok, id = ns.Ready(ASPECT_HAWK); if ok then return id end
         end
+    end
+
+    -- ===== out of ammo: fight in melee (the arrow says "step closer" until you are there) =====
+    -- no Hunter's Mark: it only adds ranged attack power
+    if dry then
+        local lacerate = "Lacerate"
+        if zone ~= "melee" then return nil end
+        return first(
+            function() return ns.Ready(MONGOOSE_BITE) end,
+            function() return ns.Ready(RAPTOR_STRIKE) end,
+            function() return ns.ReadyName("Strider Kick", true) end,
+            function() if ns.known[lacerate] and lives and not ns.DebuffUp(lacerate) then return ns.ReadyName(lacerate, true) end end,
+            function() if lives then return ns.Ready(IMMOLATION_TRAP) end end,
+            function() if lives then return ns.Ready(EXPLOSIVE_TRAP) end end,
+            function() return ns.ReadyName("Counterattack", true) end,
+            function() if ns.flag(ns.safe(UnitIsPlayer, "target")) and not ns.DebuffUp(name(WING_CLIP)) then return ns.Ready(WING_CLIP) end end
+        )
     end
 
     -- ===== melee range =====
@@ -211,7 +248,7 @@ local function firstAnswer(list)
     return nil
 end
 
-function ns.RangeZone()
+local function rangeZone()
     if not ns.HostileTarget() then return nil end
     local melee = firstAnswer({ WING_CLIP, MONGOOSE_BITE })
     local near = ns.flag(ns.safe(CheckInteractDistance, "target", 3)) -- about 10 yd
@@ -227,6 +264,13 @@ function ns.RangeZone()
     end
     if shoot == false then return "far" end
     return nil
+end
+
+-- out of ammo the only place to fight is melee: anything farther is "too far"
+function ns.RangeZone()
+    local z = rangeZone()
+    if z and z ~= "melee" and noAmmo() then return "far" end
+    return z
 end
 
 function ns.InitClass()

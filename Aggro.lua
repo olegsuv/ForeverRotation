@@ -79,6 +79,12 @@ local function bracket(unit)
     return lo, hi
 end
 
+-- the same bracket for the range zone by the nameplate (works with the aggro log off too)
+function ns.DistanceBracket(unit)
+    if not probes then return nil end
+    return bracket(unit)
+end
+
 local function guidOf(unit)
     local g = ns.safe(UnitGUID, unit)
     if g and not ns.isSecret(g) then return g end
