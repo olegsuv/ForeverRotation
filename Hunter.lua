@@ -157,11 +157,14 @@ local function rotation()
         function() if manaOk or not lives then return ns.Ready(ARCANE_SHOT, true) end end,
         -- Multi-Shot as a filler only on your own pack: it hits the next party's mob too
         function() if manaOk and enemies >= 2 then return okMulti, multiID end end,
-        -- nothing to cast: Auto Shot does the work (shown with the weapon icon of its button)
+        -- nothing to cast and Auto Shot not running: start it (its button's weapon icon)
         function()
             if zone ~= "shoot" then return end
-            local _, id = ns.Spell(AUTO_SHOT)
-            if id then return true, id end
+            local n, id = ns.Spell(AUTO_SHOT)
+            if not id then return end
+            if C_Spell.IsCurrentSpell and ns.flag(ns.safe(C_Spell.IsCurrentSpell, id)) then return end
+            if ns.ButtonActive(n) then return end
+            return true, id
         end
     )
 end

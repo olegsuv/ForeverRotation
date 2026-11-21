@@ -1,3 +1,7 @@
+## 0.7.1
+
+- Hunter: Auto Shot is suggested only while it isn't running; once it shoots, the square stays empty until there is something to cast.
+
 ## 0.7.0
 
 - Time to die: DoTs, curses, marks, stings and long cooldowns are suggested only when the mob will live long enough for them. The game hides enemy health in combat, so the addon learns how long your kills take (one average each for normal / elite mobs solo, in a group and in dungeons, plus bosses, adjusted by the level gap) and counts down from the pull; when health can be read, it follows the health trend instead. Finishers (Shadow Word: Death, Shadowburn, Drain Soul, Ferocious Bite, Eviscerate) come in when the mob is about to die.
