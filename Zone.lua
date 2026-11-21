@@ -9,7 +9,6 @@ local ZONES = {
     shoot = { "Interface\\Icons\\Ability_Marksmanship", 0.3, 1, 0.3, "Shoot" },
     far   = { "Interface\\Icons\\Ability_Rogue_Sprint", 0.6, 0.6, 0.6, "Too far" },
 }
-ns.ZONES = ZONES
 
 -- styled like the plate's level box: dark fill, thin rounded border (zone colour instead of the
 -- game's yellow), texts in the plate's name font with its shadow. Parented to the plate so it
@@ -118,8 +117,8 @@ driver:SetScript("OnUpdate", function(_, e)
     elapsed = elapsed + e
     if elapsed < 0.2 then return end
     elapsed = 0
-    if not ns.db or not ns.db.zonePlate or not ns.zoneUseful or not ns.RangeZone then f:Hide(); return end
-    local z = ns.RangeZone()
+    if not ns.db or not ns.db.zonePlate or not ns.zoneUseful then f:Hide(); return end
+    local z = ns.Zone()
     local d = z and ZONES[z]
     if d and anchorToPlate() then
         f.tex:SetTexture(d[1])

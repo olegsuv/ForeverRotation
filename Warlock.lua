@@ -65,18 +65,17 @@ local function rotation()
     local p = ns.PotionCheck(true); if p then return p end
     local fighting = ns.flag(UnitAffectingCombat("player"))
     local s = spec()
-    local lives = ns.Lives(35)
+    local lives = ns.Lives(35, 8)
     local tough = ns.TargetIsTough()
     local enemies = ns.EnemyCount()
     local onMe = ns.TargetOnMe()
-    local hp = ns.Percent("target")
     local myHp = ns.Percent("player")
     local lowMana = ns.ManaShort(25, SHADOW_BOLT)
     local agony = bane()
-    -- Doom (one big tick a minute) only on a tough mob near full health: it lives that long
+    -- Doom (one big tick a minute) only on a mob that lives that long
     local myBane = agony
-    if tough and (hp == nil or hp >= 80) and doom() then myBane = doom() end
-    local myCurse = tough and curse(onMe) or nil
+    if doom() and ns.Lives(80, 50) and not ns.flag(ns.safe(UnitIsPlayer, "target")) then myBane = doom() end
+    local myCurse = (tough and ns.Lives(35, 20)) and curse(onMe) or nil
 
     if not fighting then
         local armor = ns.Known(DEMON_ARMOR) and DEMON_ARMOR or DEMON_SKIN
@@ -97,7 +96,7 @@ local function rotation()
         function() if enemies >= 3 and ns.flag(ns.safe(CheckInteractDistance, "target", 3)) and not ns.LowHealth(60) then return R(HELLFIRE) end end,
         function() if enemies >= 3 then return R(RAIN_OF_FIRE) end end,
         -- execute / procs
-        function() if hp and hp < 20 then return R(SHADOWBURN, true) end end,
+        function() if ns.Dying(20, 5) then return R(SHADOWBURN, true) end end,
         function() if ns.Proc(SHADOW_BOLT) then return R(SHADOW_BOLT, true) end end,
         function() if up(IMMOLATE) then return R(CONFLAGRATE, true) end end,
         -- DoTs on mobs that live
@@ -105,11 +104,11 @@ local function rotation()
         function() if lives and myBane and not anyUp(BANES) then return R(myBane, true) end end,
         function() if tough and myCurse and not anyUp(CURSES) then return R(myCurse, true) end end,
         function() if lives and not up(CORRUPTION) then return R(CORRUPTION, true) end end,
-        function() if lives and not up(SIPHON_LIFE) then return R(SIPHON_LIFE, true) end end,
+        function() if ns.Lives(35, 12) and not up(SIPHON_LIFE) then return R(SIPHON_LIFE, true) end end,
         function() if lives and s ~= "affli" and not up(IMMOLATE) then return R(IMMOLATE, true) end end,
         function() if lives and up(CORRUPTION) then return R("Wrack", true) end end,
         -- dying mob: grab a shard
-        function() if hp and hp < 20 and not tough and (ns.num(ns.safe(C_Item.GetItemCount, 6265)) or 0) < 5 then return R(DRAIN_SOUL, true) end end,
+        function() if ns.Dying(20, 4) and not tough and (ns.num(ns.safe(C_Item.GetItemCount, 6265)) or 0) < 5 then return R(DRAIN_SOUL, true) end end,
         function() if lowMana then return ns.Wand() end end,
         -- filler
         function() if s == "affli" and myHp and myHp < 80 then return R(DRAIN_LIFE, true) end end,

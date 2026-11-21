@@ -11,19 +11,13 @@ local SUMMON_HAWK, SNIPER_SHOT = 1293241, 1310687
 local VOLLEY, BESTIAL_WRATH, INTIMIDATION = 1510, 19574, 19577
 local ASPECT_HAWK, ASPECT_MONKEY, ASPECT_CHEETAH, ASPECT_PACK, ASPECT_BEAST, ASPECT_WILD = 13165, 13163, 5118, 13159, 13161, 20043
 
--- best first
-local MANA_POTIONS = { 13444, 13443, 6149, 3827, 3385, 2455 }
-local HEAL_POTIONS = { 13446, 3928, 1710, 929, 858, 118 }
-
 -- Serpent Sting does nothing to these (enUS / ruRU creature types)
 local NO_STING = { ["Mechanical"] = true, ["Механизм"] = true }
 
 local function stingWorthIt()
     local ctype = ns.safe(UnitCreatureType, "target")
     if ctype and not ns.isSecret(ctype) and NO_STING[ctype] then return false end
-    local hp = ns.Percent("target")
-    if hp and hp < 30 and not ns.TargetIsTough() then return false end -- dies before it ticks
-    return true
+    return ns.Lives(30, 8) -- dies before it ticks
 end
 
 local function name(id) return C_Spell.GetSpellName(id) end
@@ -33,30 +27,9 @@ local function dps(baseID, targets)
     return id and ns.DPS(id, targets) or 0
 end
 
--- the target is hitting you (not your pet): true / false / nil (hidden)
-local function targetOnMe()
-    local onMe = ns.flag(ns.safe(UnitIsUnit, "targettarget", "player"))
-    if onMe ~= nil then return onMe end
-    local threat = ns.num(ns.safe(UnitThreatSituation, "player", "target"))
-    if threat then return threat >= 2 end
-    return nil
-end
-
 local function petAlive()
     if not UnitExists("pet") then return false end
     return ns.flag(ns.safe(UnitIsDead, "pet")) ~= true
-end
-
--- not enough mana for a basic shot (the game hides mana numbers in combat)
-local function outOfMana()
-    for _, b in ipairs({ ARCANE_SHOT, SERPENT_STING }) do
-        local _, id = ns.Spell(b)
-        if id then
-            local _, noMana = ns.Usable(id)
-            if noMana == true then return true end
-        end
-    end
-    return false
 end
 
 -- nothing to shoot: no ranged weapon, or a bow / gun with the ammo slot empty (thrown needs none)
@@ -70,7 +43,6 @@ local function noAmmo()
     local count = ns.num(ns.safe(GetInventoryItemCount, "player", AMMO_SLOT))
     return not ammo or count == 0
 end
-ns.HunterNoAmmo = noAmmo
 
 -- Survival-style melee weaving: Strider Kick / Lacerate learned or Aspect of the Beast on
 local function meleeSpec()
@@ -79,13 +51,7 @@ local function meleeSpec()
     return beast and ns.known[beast] and ns.PlayerBuff(beast) or false
 end
 
-local function first(...)
-    for i = 1, select("#", ...) do
-        local f = select(i, ...)
-        local ok, id = f()
-        if ok then return id end
-    end
-end
+local first = ns.first
 
 --[[ Priority, from the Forever leveling and spec guides (Maxroll, Mobalytics, Method, Icy Veins, 11/2026):
   Opener: Hunter's Mark (not on mobs that die fast), pet in, Serpent Sting (same), Aimed Shot (baseline
@@ -99,24 +65,13 @@ end
 local function rotation()
     local mana = ns.Percent("player", Enum.PowerType.Mana)
     local fighting = ns.flag(UnitAffectingCombat("player"))
+    local p = ns.PotionCheck(true, { ARCANE_SHOT, SERPENT_STING }); if p then return p end
 
-    -- potions first when it matters
-    if ns.db.potions and fighting then
-        local hp = ns.Percent("player")
-        if hp and hp < ns.db.potionHealth then
-            local s = ns.ReadyItem(HEAL_POTIONS); if s then return s end
-        end
-        if (mana and mana < ns.db.potionMana) or (not mana and outOfMana()) then
-            local s = ns.ReadyItem(MANA_POTIONS); if s then return s end
-        end
-    end
-
-    local zone = ns.RangeZone()
-    local hp = ns.Percent("target")
+    local zone = ns.Zone()
     local tough = ns.TargetIsTough()
-    local lives = not hp or hp >= 50 or tough -- worth a DoT / mark / hawk
+    local lives = ns.Lives(50, 10) -- worth a DoT / mark / hawk
     local melee = meleeSpec()
-    local onMe = targetOnMe()
+    local onMe = ns.TargetOnMe()
     local dry = noAmmo()
 
     -- aspect: Monkey with nothing to shoot, Beast for melee weaving, Hawk for shooting
@@ -200,37 +155,24 @@ local function rotation()
         -- Summon Hawk (keep 2 out on mobs that live) or Arcane Shot (same cooldown)
         function() if hawks < 2 and lives and manaOk then return ns.Ready(SUMMON_HAWK, true) end end,
         function() if manaOk or not lives then return ns.Ready(ARCANE_SHOT, true) end end,
-        function() if manaOk then return okMulti, multiID end end
-    ) -- nothing: let Auto Shot work
+        -- Multi-Shot as a filler only on your own pack: it hits the next party's mob too
+        function() if manaOk and enemies >= 2 then return okMulti, multiID end end,
+        -- nothing to cast: Auto Shot does the work (shown with the weapon icon of its button)
+        function()
+            if zone ~= "shoot" then return end
+            local _, id = ns.Spell(AUTO_SHOT)
+            if id then return true, id end
+        end
+    )
 end
 
--- compact state for the trace log: name known/usable/cooldown/range
-function ns.TraceState()
+-- hunter-only trace fields, after the generic state
+function ns.TraceExtra()
     local out = {}
-    local mana = ns.Percent("player", Enum.PowerType.Mana)
-    out[#out + 1] = ("mana=%s"):format(mana and ("%d"):format(mana) or "?")
-    out[#out + 1] = ("en=%d"):format(ns.EnemyCount(MULTI_SHOT))
-    for _, b in ipairs({ HUNTERS_MARK, SERPENT_STING, ARCANE_SHOT, MULTI_SHOT, AIMED_SHOT, RAPTOR_STRIKE }) do
-        local n, id = ns.Spell(b)
-        if id then
-            local u = ns.Usable(id)
-            local info = ns.safe(C_Spell.GetSpellCooldown, id)
-            local cdText = "?"
-            if type(info) == "table" then
-                if ns.isSecret(info.duration) or ns.isSecret(info.startTime) then cdText = "S"
-                elseif ns.num(info.duration) then cdText = ("%.1f"):format(info.duration) end
-            end
-            local r = ns.InRange(id)
-            out[#out + 1] = ("%s:%s/u%s/cd%s(%s)/r%s"):format(n:sub(1, 6), id, u and 1 or 0,
-                ns.OnCooldown(id) and 1 or 0, cdText, r == nil and "?" or (r and 1 or 0))
-        end
-    end
-    local sting = name(SERPENT_STING)
-    out[#out + 1] = "zone=" .. tostring(ns.RangeZone())
     out[#out + 1] = "near=" .. tostring(ns.flag(ns.safe(CheckInteractDistance, "target", 3)))
     local _, wc = ns.Spell(WING_CLIP)
     out[#out + 1] = "wing=" .. tostring(wc and ns.InRange(wc))
-    out[#out + 1] = "stingUp=" .. tostring(ns.DebuffUp(sting))
+    out[#out + 1] = "stingUp=" .. tostring(ns.DebuffUp(name(SERPENT_STING)))
     out[#out + 1] = "hawkUp=" .. tostring(ns.PlayerBuff(name(ASPECT_HAWK)))
     return table.concat(out, " ")
 end
@@ -285,5 +227,8 @@ function ns.InitClass()
     local sting = name(SERPENT_STING)
     if sting then ns.durations[sting] = 15 end
     ns.zoneUseful = true
+    ns.aoeRange = MULTI_SHOT -- enemies counted within shooting range
+    ns.traceSpells = { HUNTERS_MARK, SERPENT_STING, ARCANE_SHOT, MULTI_SHOT, AIMED_SHOT, RAPTOR_STRIKE }
+    ns.idleSpell = AUTO_SHOT
     ns.rotation = rotation
 end

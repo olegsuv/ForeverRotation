@@ -19,8 +19,8 @@ Small helper for **WoW Forever** (Interface 16001):
   - **Shaman** – imbue, Lightning Shield, Stormstrike, Maelstrom bolts, totems, shocks, Lava Burst.
   - **Druid** – cat, bear and caster / Moonkin rotations, Mark of the Wild, self-heals.
 
-  Mana / healing potions and self-heal spells when you're low. Only the Hunter has been tested in
-  game so far – reports for the other classes are very welcome (`/frot trace` logs decisions).
+  Mana / healing potions and self-heal spells when you're low. Hunter and Warlock have been played
+  with the addon; reports for the other classes are very welcome (`/frot trace` logs decisions).
 - **Damage-per-second numbers on your action buttons** (any class): expected damage of one press
   divided by the time it costs you. Instant spells count as one global cooldown (1.5 s); cast-time
   spells count their cast. Read from the spell's tooltip plus your weapon damage, attack power and crit.
@@ -38,6 +38,9 @@ is not added for casters.
 `/frot unlock` / `/frot lock` – move the icon
 `/frot scale 1.2` – icon size
 `/frot debug` – print what the addon reads from your buttons
+`/frot trace` – keep a log of the addon's decisions (SavedVariables, for bug reports)
+`/frot spells` – save your spellbook with spell ids (for bug reports and translations)
+`/frot aggro` – what the aggro data log has collected
 
 The addon only shows what to press; you press every key yourself.
 

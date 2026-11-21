@@ -24,10 +24,9 @@ local function rotation()
     local melee = ns.InMelee(MELEE)
     if melee == false then return nil end
     local tough = ns.TargetIsTough()
-    local lives = ns.Lives(35)
+    local lives = ns.Lives(35, 8)
     local enemies = ns.EnemyCount()
     local cp = ns.ComboPoints()
-    local hp = ns.Percent("target")
     local stealthed = IsStealthed and ns.flag(ns.safe(IsStealthed))
 
     if stealthed then
@@ -41,7 +40,7 @@ local function rotation()
     end
 
     local sndUp = ns.SelfBuff(SND)
-    local dying = hp and hp < 20 and not tough
+    local dying = ns.Dying(20, 4)
     return first(
         function() if ns.TargetCasting() then return R(KICK, true) end end,
         function() if fighting and ns.LowHealth(35) and ns.TargetOnMe() ~= false then return R(EVASION) end end,
@@ -57,6 +56,7 @@ local function rotation()
         -- builders
         function() return R("Shank", true) end,
         function() return R(GHOSTLY, true) end,
+        function() return R("Mutilate", true) end, -- daggers
         function() return R(HEMO, true) end,
         function() return R(SINISTER, true) end
     )
@@ -69,6 +69,7 @@ function ns.InitClass()
         if n(s) then ns.cpBuilders[n(s)] = 1 end
     end
     ns.cpBuilders["Shank"] = 1
+    ns.cpBuilders["Mutilate"] = 2
     if n(CHEAP_SHOT) then ns.cpBuilders[n(CHEAP_SHOT)] = 2 end
     for _, s in ipairs({ EVISCERATE, SND, RUPTURE, EXPOSE, KIDNEY }) do
         if n(s) then ns.cpFinishers[n(s)] = true end

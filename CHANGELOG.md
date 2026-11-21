@@ -1,3 +1,21 @@
+## 0.7.0
+
+- Time to die: DoTs, curses, marks, stings and long cooldowns are suggested only when the mob will live long enough for them. The game hides enemy health in combat, so the addon learns how long your kills take (one average each for normal / elite mobs solo, in a group and in dungeons, plus bosses, adjusted by the level gap) and counts down from the pull; when health can be read, it follows the health trend instead. Finishers (Shadow Word: Death, Shadowburn, Drain Soul, Ferocious Bite, Eviscerate) come in when the mob is about to die.
+- Packs: mobs tagged by another group, or fighting the next party while you're not on their threat list, no longer count, so Multi-Shot / Volley / Blizzard and co. aren't suggested for someone else's pull. Hunter: Multi-Shot as a filler only on your own pack.
+- Forever spells added: Mutilate (Rogue), Penance and Inner Focus (Priest), Holy Shock and Holy Shield (Paladin), Primal Bite, Lacerate and Innervate (Druid), Fire Nova and Strength of Earth Totem (Shaman), Blast Wave (Mage).
+- Druid cat: a Clearcasting Shred goes before Ferocious Bite. Warrior: Hamstring dumps rage about to cap while the big strikes are on cooldown.
+- Moving: a big arrow takes the spell's place on the square whenever you have to step closer (green, up: too far, or out of ammo and not in melee) or back (red, down: the hunter's dead zone); Charge, Intercept, Feral Charge, Shadowstep and Disengage still show as the spell. It doesn't bounce and waits a moment before changing, so it no longer twitches at the edge of a range. The small arrow over the square is gone.
+- The square shows the icon of the action button holding the spell: a potion's own icon, Auto Shot's weapon icon. Hunter with nothing to cast in range: Auto Shot (it doesn't glow while it's already shooting).
+- A potion on the square says "Use" under it instead of the range zone.
+- Mana potions only when the fight goes on for another 10 s or so, not for a mob about to die.
+- No live hostile target: nothing on the square and no glowing buttons (the free square shows the addon icon only while unlocked).
+- Fixed: interrupts (Pummel, Kick, Counterspell, Earth Shock...) were suggested on casts that can't be interrupted; the flag never reached the addon.
+- What this character cast, which aspect is up and the learned kill times are now saved per character (an alt no longer starts with your main's data). Needs a game restart once, not just /reload.
+- Hunter: potions through the shared check like every class; when the game hides your mana, a basic shot's "not enough mana" stands in.
+- Less work per frame: the range zone is computed once per frame for all its readers, the enemy count once per tick, the action bars are no longer re-read on every buff change.
+- `/frot spells` saves your spellbook (names and ids) for bug reports and translations.
+- The trace log (`/frot trace`) shows the time-to-die estimate and the target's health (or ? when hidden).
+
 ## 0.6.0
 
 - Warlock: curses. On elites, rares and players: Curse of the Elements (else Curse of Weakness while it hits you) once per target, and Bane of Doom instead of Bane of Agony on a tough mob near full health. Only one Bane and one Curse of yours at a time.

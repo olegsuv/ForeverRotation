@@ -251,7 +251,7 @@ local FAMILY = {
       notes = "next spell to press, damage numbers on your buttons" },
     { name = "ForeverGear", title = "Forever Gear", url = "https://www.curseforge.com/wow/addons/forever-gear",
       notes = "green arrows on better gear in your bags" },
-    { name = "ForeverLootKey", title = "Forever LootKey", url = "https://www.curseforge.com/wow/addons/forever-lootkey",
+    { name = "ForeverLootKey", title = "Forever Loot", url = "https://www.curseforge.com/wow/addons/forever-lootkey",
       notes = "one key loots the nearest corpse, instant auto loot" },
 }
 

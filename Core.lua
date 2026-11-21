@@ -12,7 +12,7 @@ ns.DEFAULTS = {
     potionHealth = 30, -- suggest a healing potion below this % health (in combat)
     zone = false,      -- range zone (melee / dead zone / shoot / too far) under the square (not for pure melee)
     zonePlate = true,  -- the same zone as an icon next to the target's nameplate (not for pure melee)
-    moveArrow = true,  -- arrow by the square: step back (too close to shoot) / step closer (out of reach)
+    moveArrow = true,  -- big arrow on the square instead of the spell: step back / step closer
     selfHeal = 35,     -- healers / hybrids: suggest a self-heal below this % health
     trace = true,      -- keep a short log of rotation decisions in SavedVariables (debug)
     aggroLog = true,   -- log at what distance / level mobs aggro on you (data for an aggro indicator)
@@ -30,8 +30,8 @@ ns.isSecret = isSecret
 
 function ns.safe(f, ...)
     if not f then return nil end
-    local ok, a, b, c, d, e, g, h = pcall(f, ...)
-    if ok then return a, b, c, d, e, g, h end
+    local ok, a, b, c, d, e, g, h, i, j = pcall(f, ...)
+    if ok then return a, b, c, d, e, g, h, i, j end
 end
 
 -- true / false / nil (unknown or hidden)
@@ -134,15 +134,23 @@ function ns.Usable(id)
     return true
 end
 
+-- the spell as you know it (highest rank), by base id or by name; nil when not known
+function ns.ID(spell)
+    local n = type(spell) == "string" and spell or C_Spell.GetSpellName(spell)
+    return n and ns.known[n] or nil
+end
+
 -- known + usable + off cooldown (+ target not out of range when checkRange)
-function ns.Ready(baseID, checkRange)
-    local _, id = ns.Spell(baseID)
+function ns.Ready(spell, checkRange)
+    local id = ns.ID(spell)
     if not id then return false end
     if not ns.Usable(id) then return false end
     if ns.OnCooldown(id) then return false end
     if checkRange and ns.InRange(id) == false then return false end
     return true, id
 end
+ns.ReadyName = ns.Ready
+ns.R = ns.Ready
 
 -- Trace: why the rotation picked what it picked (saved, for remote debugging)
 function ns.Trace(line)
@@ -151,16 +159,6 @@ function ns.Trace(line)
     ns.db.traceLog = t
     t[#t + 1] = ("%.1f %s"):format(GetTime(), line)
     while #t > 300 do table.remove(t, 1) end
-end
-
--- same as Ready, by spell name (for Forever-only spells whose ids we don't hard-code)
-function ns.ReadyName(spellName, checkRange)
-    local id = ns.known[spellName]
-    if not id then return false end
-    if not ns.Usable(id) then return false end
-    if ns.OnCooldown(id) then return false end
-    if checkRange and ns.InRange(id) == false then return false end
-    return true, id
 end
 
 function ns.InRange(id, unit)
@@ -210,7 +208,7 @@ function ns.PlayerBuff(name)
             if exclusive then
                 if aura ~= nil then
                     lastExclusive = name
-                    if ns.db then ns.db.lastAspect = name end
+                    if ns.cdb then ns.cdb.lastAspect = name end
                 end
             end
             if aura ~= nil then return true end
@@ -234,11 +232,6 @@ function ns.first(...)
     end
 end
 
--- R(id or name [, checkRange]): ready by base spell id (any rank) or by name
-function ns.R(spell, checkRange)
-    if type(spell) == "number" then return ns.Ready(spell, checkRange) end
-    return ns.ReadyName(spell, checkRange)
-end
 
 -- name of a base spell id (Forever renames some: Curse of Agony -> Bane of Agony)
 function ns.N(spell)
@@ -248,8 +241,7 @@ end
 
 -- do we know this spell (id or name)?
 function ns.Known(spell)
-    local n = ns.N(spell)
-    return n and ns.known[n] and true or false
+    return ns.ID(spell) ~= nil
 end
 
 -- raw power value, nil when hidden
@@ -260,8 +252,7 @@ end
 
 -- the spell's own resource is short (rage, energy, mana): true / false
 function ns.NoResource(spell)
-    local n = ns.N(spell)
-    local id = n and ns.known[n]
+    local id = ns.ID(spell)
     if not id then return false end
     local _, noMana = ns.Usable(id)
     return noMana == true
@@ -269,8 +260,7 @@ end
 
 -- known and off cooldown, only short of its resource: the spell to wait for (rage, energy)
 function ns.Pool(spell, checkRange)
-    local n = ns.N(spell)
-    local id = n and ns.known[n]
+    local id = ns.ID(spell)
     if not id or ns.OnCooldown(id) then return false end
     if checkRange and ns.InRange(id) == false then return false end
     local usable, noMana = ns.Usable(id)
@@ -302,6 +292,14 @@ function ns.TargetCasting()
     return true
 end
 
+-- a shield in the off hand
+function ns.ShieldOn()
+    local id = GetInventoryItemID and ns.safe(GetInventoryItemID, "player", 17)
+    if not id then return false end
+    local _, _, _, loc = ns.safe(C_Item.GetItemInfoInstant, id)
+    return loc == "INVTYPE_SHIELD"
+end
+
 -- the target is hitting you: true / false / nil (hidden)
 function ns.TargetOnMe()
     local onMe = ns.flag(ns.safe(UnitIsUnit, "targettarget", "player"))
@@ -323,11 +321,153 @@ function ns.CanBleed()
     return not (t and BLEED_IMMUNE[t])
 end
 
--- the mob lives long enough for a DoT / buildup: not low, or elite / player
-function ns.Lives(threshold)
+---------------------------------------------------------------------------
+-- Time to die. The game hides the target's health from addons in combat, so two sources:
+-- the health trend while it can be read, else how long your recent kills of this kind took
+-- (normal / elite, solo / group, scaled by the level gap) minus how long this fight has run.
+-- Kill times are learned as you play and kept in SavedVariables.
+---------------------------------------------------------------------------
+-- kinds: normal / elite x solo / group / dungeon, and bosses
+local KILL_PRIOR = { ns = 15, ng = 9, es = 45, eg = 25, nd = 8, ed = 20, b = 90 } -- seconds, before anything is learned
+local fights = {} -- [guid] = { start, samples = { {t, hp} }, seen, done }
+
+local function targetGuid()
+    local g = ns.safe(UnitGUID, "target")
+    if g and not isSecret(g) then return g end
+end
+
+local function isPlayerTarget()
+    return ns.flag(ns.safe(UnitIsPlayer, "target")) == true
+end
+
+local function killKind()
+    local cls = ns.safe(UnitClassification, "target")
+    if isSecret(cls) then cls = nil end
+    local lvl = ns.num(ns.safe(UnitLevel, "target"))
+    local boss = cls == "worldboss" or ns.flag(ns.safe(UnitIsBossMob, "target")) == true
+    local _, instance = IsInInstance()
+    local dungeon = instance == "party" or instance == "raid"
+    if boss or (dungeon and lvl == -1) then return "b" end
+    local elite = cls == "elite" or cls == "rareelite"
+    local where = dungeon and "d" or ((IsInGroup and IsInGroup()) and "g" or "s")
+    return (elite and "e" or "n") .. where
+end
+
+-- mobs above you take longer, below you go faster (?? skulls: much longer)
+local function levelScale()
+    local me = UnitLevel("player") or 1
+    local it = ns.num(ns.safe(UnitLevel, "target"))
+    if not it or it <= 0 then return 1.6 end
+    return math.max(0.5, math.min(1.6, 1 + (it - me) * 0.1))
+end
+
+local function learnedKill()
+    local kind = killKind()
+    local k = ns.cdb and ns.cdb.killTimes and ns.cdb.killTimes[kind]
+    return (k and k.avg or KILL_PRIOR[kind]) * levelScale()
+end
+
+local function recordKill(f, now)
+    local secs = now - f.start
+    if secs < 2 or secs > 400 then return end
+    local kind = killKind()
+    ns.cdb.killTimes = ns.cdb.killTimes or {}
+    local k = ns.cdb.killTimes[kind] or { avg = KILL_PRIOR[kind], n = 0 }
+    local norm = secs / levelScale()
+    k.avg = k.n == 0 and (k.avg + norm) / 2 or k.avg * 0.8 + norm * 0.2
+    k.n = k.n + 1
+    ns.cdb.killTimes[kind] = k
+end
+
+-- every 0.25 s: start the fight clock, sample readable health, learn from the kill
+local function sampleTarget()
+    local now = GetTime()
+    for guid, f in pairs(fights) do
+        if now - f.seen > 60 then fights[guid] = nil end
+    end
+    local guid = targetGuid()
+    if not guid or isPlayerTarget() then return end
+    if ns.flag(ns.safe(UnitCanAttack, "player", "target")) == false then return end
+    local f = fights[guid]
+    if ns.flag(ns.safe(UnitIsDead, "target")) == true then
+        if f and not f.done then
+            f.done = true
+            local ours = ns.flag(ns.safe(UnitIsTapDenied, "target")) ~= true
+            if ours and ns.cdb then recordKill(f, now) end
+        end
+        return
+    end
+    if not f then
+        if ns.flag(ns.safe(UnitAffectingCombat, "target")) ~= true then return end
+        f = { start = now, samples = {} }
+        fights[guid] = f
+    end
+    f.seen = now
+    local hp = ns.Percent("target")
+    if hp then
+        local s = f.samples
+        s[#s + 1] = { now, hp }
+        while #s > 0 and now - s[1][1] > 10 do table.remove(s, 1) end
+    end
+end
+
+-- seconds the target has left (nil for players: they heal, run and trinket)
+function ns.TimeToDie()
+    if not UnitExists("target") or isPlayerTarget() then return nil end
+    local guid = targetGuid()
+    local f = guid and fights[guid]
+    local now = GetTime()
+    local hp = ns.Percent("target")
+    if hp then
+        local s = f and f.samples
+        if s and #s >= 3 and s[#s][1] - s[1][1] >= 2 then
+            -- least squares slope of health over the last few seconds
+            local n, st, sh, stt, sth = #s, 0, 0, 0, 0
+            for _, p in ipairs(s) do
+                local t = p[1] - s[1][1]
+                st, sh, stt, sth = st + t, sh + p[2], stt + t * t, sth + t * p[2]
+            end
+            local den = n * stt - st * st
+            if den > 0 then
+                local slope = (n * sth - st * sh) / den
+                if slope >= -0.05 then return 600 end -- not going down
+                return hp / -slope
+            end
+        end
+        return learnedKill() * hp / 100
+    end
+    local elapsed = f and (now - f.start) or 0
+    return math.max(0, learnedKill() - elapsed)
+end
+
+-- the mob lives long enough for a DoT / buildup: `need` seconds left (default 8). Players
+-- always count; without a time estimate it falls back to the health threshold.
+function ns.Lives(threshold, need)
+    if isPlayerTarget() then return true end
+    local ttd = ns.TimeToDie()
+    if ttd then return ttd >= (need or 8) end
     local hp = ns.Percent("target")
     return not hp or hp >= (threshold or 40) or ns.TargetIsTough()
 end
+
+-- the mob is about to die: under `pct` health when that can be read (not elites), or under
+-- `secs` seconds left by the time estimate
+function ns.Dying(pct, secs)
+    local hp = ns.Percent("target")
+    if isPlayerTarget() then return hp ~= nil and hp < (pct or 20) end
+    if hp and hp < (pct or 20) and not ns.TargetIsTough() then return true end
+    local ttd = ns.TimeToDie()
+    return ttd ~= nil and ttd < (secs or 4)
+end
+
+local ttdTicker = CreateFrame("Frame")
+local ttdElapsed = 0
+ttdTicker:SetScript("OnUpdate", function(_, e)
+    ttdElapsed = ttdElapsed + e
+    if ttdElapsed < 0.25 then return end
+    ttdElapsed = 0
+    sampleTarget()
+end)
 
 -- in melee: first probe spell that answers, else interact distance (~10 yd)
 function ns.InMelee(probes)
@@ -384,7 +524,7 @@ end
 function ns.SelfBuff(spell)
     local name = ns.N(spell)
     if not name then return nil end
-    buffExp = buffExp or (ns.db and ns.db.buffExp) or {}
+    buffExp = buffExp or (ns.cdb and ns.cdb.buffExp) or {}
     local id = ns.known[name]
     if id and C_Spell.IsCurrentSpell and ns.flag(ns.safe(C_Spell.IsCurrentSpell, id)) then return true end
     if ns.ButtonActive and ns.ButtonActive(name) then return true end
@@ -430,7 +570,7 @@ end
 
 local function trackCast(name)
     local now = GetTime()
-    buffExp = buffExp or (ns.db and ns.db.buffExp) or {}
+    buffExp = buffExp or (ns.cdb and ns.cdb.buffExp) or {}
     local dur = ns.selfBuffs[name]
     if dur then
         local g = ns.buffGroups[name]
@@ -455,7 +595,9 @@ ns.MANA_POTIONS = { 13444, 13443, 6149, 3827, 3385, 2455 }
 ns.HEAL_POTIONS = { 13446, 3928, 1710, 929, 858, 118 }
 
 -- usesMana: the class runs on mana
-function ns.PotionCheck(usesMana)
+-- usesMana: the class drinks mana potions; probes: basic spells whose "no mana" answer stands
+-- in for the mana number when the game hides it
+function ns.PotionCheck(usesMana, probes)
     if not ns.db.potions then return nil end
     if not ns.flag(UnitAffectingCombat("player")) then return nil end
     local hp = ns.Percent("player")
@@ -464,7 +606,13 @@ function ns.PotionCheck(usesMana)
     end
     if usesMana then
         local mana = ns.Percent("player", Enum.PowerType.Mana)
-        if mana and mana < ns.db.potionMana then
+        local short = mana and mana < ns.db.potionMana
+        if mana == nil and probes then
+            for _, p in ipairs(probes) do
+                if ns.NoResource(p) then short = true; break end
+            end
+        end
+        if short and ns.Lives(30, 10) then -- not for a mob about to die
             local s = ns.ReadyItem(ns.MANA_POTIONS); if s then return s end
         end
     end
@@ -525,9 +673,23 @@ function ns.RangeZone()
     return nil
 end
 
+-- the range zone once per frame (five readers), and an error in a class override can't
+-- spam from an OnUpdate
+local zoneAt, zoneVal
+function ns.Zone()
+    local now = GetTime()
+    if zoneAt ~= now then
+        zoneAt = now
+        local ok, z = pcall(ns.RangeZone)
+        zoneVal = ok and z or nil
+        if not ok and ns.db and ns.db.debug then ns.Print("zone error: " .. tostring(z)) end
+    end
+    return zoneVal
+end
+
 -- which way to step: "back" (too close to shoot), "closer" (out of reach) or nil
 function ns.MoveHint()
-    local z = ns.RangeZone and ns.RangeZone()
+    local z = ns.Zone()
     if z == "dead" then return "back" end
     if z == "far" then return "closer" end
     return nil
@@ -540,18 +702,27 @@ function ns.TraceState()
     out[#out + 1] = ("pow=%s"):format(p and ("%d"):format(p) or "?")
     if next(ns.cpBuilders) then out[#out + 1] = "cp=" .. tostring(ns.ComboPoints()) end
     out[#out + 1] = "form=" .. tostring(ns.Form())
-    out[#out + 1] = ("en=%d"):format(ns.EnemyCount())
+    out[#out + 1] = ("en=%d"):format(ns.EnemyCount(ns.aoeRange))
+    local ttd, thp = ns.TimeToDie(), ns.Percent("target")
+    out[#out + 1] = ("ttd=%s hp=%s"):format(ttd and ("%d"):format(ttd) or "?", thp and ("%d"):format(thp) or "?")
     for _, s in ipairs(ns.traceSpells) do
         local n = ns.N(s)
         local id = n and ns.known[n]
         if id then
             local u = ns.Usable(id)
             local r = ns.InRange(id)
-            out[#out + 1] = ("%s:u%s/cd%s/r%s"):format(n:sub(1, 6), u and 1 or 0, ns.OnCooldown(id) and 1 or 0,
-                r == nil and "?" or (r and 1 or 0))
+            local info = ns.safe(C_Spell.GetSpellCooldown, id)
+            local cdText = "?"
+            if type(info) == "table" then
+                if isSecret(info.duration) or isSecret(info.startTime) then cdText = "S"
+                elseif ns.num(info.duration) then cdText = ("%.1f"):format(info.duration) end
+            end
+            out[#out + 1] = ("%s:u%s/cd%s(%s)/r%s"):format(n:sub(1, 6), u and 1 or 0, ns.OnCooldown(id) and 1 or 0,
+                cdText, r == nil and "?" or (r and 1 or 0))
         end
     end
-    out[#out + 1] = "zone=" .. tostring(ns.RangeZone())
+    out[#out + 1] = "zone=" .. tostring(ns.Zone())
+    if ns.TraceExtra then out[#out + 1] = ns.TraceExtra() end
     return table.concat(out, " ")
 end
 
@@ -577,7 +748,7 @@ local function onCast(spellID)
     trackCast(name)
     if ns.exclusiveBuffs[name] then
         lastExclusive = name
-        if ns.db then ns.db.lastAspect = name end
+        if ns.cdb then ns.cdb.lastAspect = name end
     end
     local dur = ns.durations[name]
     if not dur then return end
@@ -600,17 +771,42 @@ end
 ---------------------------------------------------------------------------
 local plates = {}
 
+-- is this mob in our fight? false when another group tagged it, or it fights someone outside
+-- your group while you're not on its threat list (the next party's pull); nil = can't tell
+local function ourFight(unit)
+    if ns.flag(ns.safe(UnitIsTapDenied, unit)) == true then return false end
+    local threat = ns.safe(UnitThreatSituation, "player", unit)
+    if isSecret(threat) then threat = "?" end
+    if threat ~= nil and threat ~= "?" then return true end
+    local tgt = unit .. "target"
+    if ns.flag(ns.safe(UnitExists, tgt)) == true then
+        if ns.flag(ns.safe(UnitIsUnit, tgt, "player")) or ns.flag(ns.safe(UnitIsUnit, tgt, "pet")) then return true end
+        if ns.flag(ns.safe(UnitInParty, tgt)) or ns.flag(ns.safe(UnitInRaid, tgt)) then return true end
+        local member = ns.flag(ns.safe(UnitPlayerOrPetInParty, tgt)) or ns.flag(ns.safe(UnitPlayerOrPetInRaid, tgt))
+        if member then return true end
+        if threat == nil then return false end -- someone else's fight, and the threat list says not ours
+    end
+    if threat == nil and ns.flag(ns.safe(UnitAffectingCombat, "player")) == true then return false end
+    return nil
+end
+-- cached for a tick: the rotation, the square, the labels and the tooltip all ask
+local enemyCache = {} -- [rangeSpellID or 0] = { t, n }
 function ns.EnemyCount(rangeSpellID)
+    local key = rangeSpellID or 0
+    local c = enemyCache[key]
+    local now = GetTime()
+    if c and now - c[1] < 0.15 then return c[2] end
     local n = 0
     for unit in pairs(plates) do
         local hostile = ns.flag(ns.safe(UnitCanAttack, "player", unit))
         local dead = ns.flag(ns.safe(UnitIsDead, unit))
         local fighting = ns.flag(ns.safe(UnitAffectingCombat, unit))
         local inRange = rangeSpellID and ns.InRange(rangeSpellID, unit)
-        if hostile ~= false and dead ~= true and fighting ~= false and inRange ~= false then
+        if hostile ~= false and dead ~= true and fighting ~= false and inRange ~= false and ourFight(unit) ~= false then
             n = n + 1
         end
     end
+    enemyCache[key] = { now, n }
     return n
 end
 
@@ -640,13 +836,18 @@ local function itemReady(itemID)
     return start == 0 or start + duration <= GetTime()
 end
 
+ns.itemSpells = {} -- use-spells of potions the rotation suggested
+
 -- first item from the list you carry that is off cooldown -> its use-spellID, itemID
 function ns.ReadyItem(list)
     for _, itemID in ipairs(list) do
         local count = ns.num(ns.safe(C_Item.GetItemCount, itemID))
         if count and count > 0 and itemReady(itemID) then
             local _, spellID = ns.safe(C_Item.GetItemSpell, itemID)
-            if spellID then return spellID, itemID end
+            if spellID then
+                ns.itemSpells[spellID] = true -- the square's caption says "Use" for these
+                return spellID, itemID
+            end
         end
     end
 end
@@ -706,8 +907,13 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
             if ForeverRotationDB[k] == nil then ForeverRotationDB[k] = v end
         end
         ns.db = ForeverRotationDB
-        ns.db.buffExp = ns.db.buffExp or {}
-        lastExclusive = ns.db.lastAspect
+        -- what this character cast, learned kill times: per character (0.7.0; the old
+        -- account-wide copies are dropped)
+        ForeverRotationCharDB = ForeverRotationCharDB or {}
+        ns.cdb = ForeverRotationCharDB
+        ns.cdb.buffExp = ns.cdb.buffExp or {}
+        lastExclusive = ns.cdb.lastAspect
+        ns.db.buffExp, ns.db.lastAspect, ns.db.killTimes = nil, nil, nil
         if not ns.db.migratedZoneText then -- 0.2.6: zone text under the square off, icon by the nameplate instead
             ns.db.zone = false
             ns.db.migratedZoneText = true
@@ -738,8 +944,8 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
     elseif event == "PLAYER_DEAD" then
         wipe(applied)
         lastExclusive = nil
-        ns.db.lastAspect = nil
-        wipe(ns.db.buffExp)
+        ns.cdb.lastAspect = nil
+        wipe(ns.cdb.buffExp)
     else
         ns.labelsDirty = true
     end
@@ -754,7 +960,7 @@ for _, e in ipairs({
     pcall(frame.RegisterEvent, frame, e)
 end
 frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
-for _, e in ipairs({ "UNIT_ATTACK_POWER", "UNIT_RANGED_ATTACK_POWER", "UNIT_RANGEDDAMAGE", "UNIT_DAMAGE", "UNIT_STATS", "UNIT_AURA" }) do
+for _, e in ipairs({ "UNIT_ATTACK_POWER", "UNIT_RANGED_ATTACK_POWER", "UNIT_RANGEDDAMAGE", "UNIT_DAMAGE", "UNIT_STATS" }) do
     pcall(frame.RegisterUnitEvent, frame, e, "player")
 end
 
@@ -772,6 +978,7 @@ local HELP = {
     "/frot debug - print what the addon reads from your buttons",
     "/frot trace - keep a log of rotation decisions (for bug reports) on/off",
     "/frot aggro - what the aggro log has collected so far",
+    "/frot spells - save your spellbook (name and id) for bug reports",
 }
 
 local function toggle(key)
@@ -798,6 +1005,13 @@ SlashCmdList.FOREVERROTATION = function(msg)
         ns.Debug()
     elseif cmd == "aggro" then
         if ns.AggroStats then ns.AggroStats() end
+    elseif cmd == "spells" then
+        ns.ScanSpellbook()
+        local out = {}
+        for n, id in pairs(ns.known) do out[#out + 1] = ("%s=%d"):format(n, id) end
+        table.sort(out)
+        ns.db.spellDump = out
+        ns.Print(("%d spells saved (SavedVariables after /reload)"):format(#out))
     elseif cmd == "" or cmd == "config" or cmd == "options" then
         if ns.ToggleOptions then ns.ToggleOptions() end
     else

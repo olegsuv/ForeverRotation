@@ -23,10 +23,9 @@ local function inForm(s) local f = ns.Form(); return f and f == ns.N(s) end
 
 local function cat()
     local cp = ns.ComboPoints()
-    local lives = ns.Lives(35)
+    local lives = ns.Lives(35, 9)
     local tough = ns.TargetIsTough()
-    local hp = ns.Percent("target")
-    local dying = hp and hp < 25 and not tough
+    local dying = ns.Dying(25, 4)
     local stealthed = IsStealthed and ns.flag(ns.safe(IsStealthed))
     if stealthed then
         return first(
@@ -38,10 +37,11 @@ local function cat()
     return first(
         function() if ns.TargetCasting() then return R(BASH, true) end end,
         function() if lives and not up(FF_FERAL) and not up(FAERIE_FIRE) then return R(FF_FERAL, true) end end,
-        function() if cp >= 4 and lives and ns.CanBleed() and (tough or (hp and hp > 60)) and not up(RIP) then return R(RIP, true) end end,
+        function() if cp >= 4 and ns.Lives(60, 12) and ns.CanBleed() and not up(RIP) then return R(RIP, true) end end,
+        -- Clearcasting: a free Shred first, the Bite waits a second
+        function() if ns.Proc(SHRED) then return R(SHRED, true) end end,
         function() if cp >= 4 or (cp >= 2 and dying) then return R(BITE, true) end end,
         function() if lives and ns.CanBleed() and not up(RAKE) then return R(RAKE, true) end end,
-        function() if ns.Proc(SHRED) then return R(SHRED, true) end end,
         function() if ns.NoResource(CLAW) then return R("Shifting Power") end end,
         function() return R("Mangle (Cat)", true) end,
         function() return R(CLAW, true) end
@@ -57,15 +57,19 @@ local function bear()
         function() if not up(FF_FERAL) and not up(FAERIE_FIRE) then return R(FF_FERAL, true) end end,
         function() if enemies >= 2 then return R(SWIPE, true) end end,
         function() return R("Mangle (Bear)", true) end,
-        function() return R(MAUL, true) end
+        function() return R("Primal Bite", true) end,
+        function() if ns.Lives(35, 8) and not ns.DebuffUp("Lacerate") then return R("Lacerate", true) end end,
+        function() return R(MAUL, true) end,
+        function() return R("Lacerate", true) end
     )
 end
 
 local function caster()
-    local lives = ns.Lives(35)
+    local lives = ns.Lives(35, 8)
     local tough = ns.TargetIsTough()
     local enemies = ns.EnemyCount()
     return first(
+        function() if ns.ManaShort(20, WRATH) then return R("Innervate") end end,
         function() if ns.LowHealth() then return R(REGROWTH) end end,
         function() if ns.LowHealth() then return R(HEALING_TOUCH) end end,
         function() if ns.LowHealth(60) and ns.RecentCasts(ns.N(REJUV) or "", 12) == 0 then return R(REJUV) end end,
@@ -111,6 +115,7 @@ function ns.InitClass()
     d[n(INSECT_SWARM) or "Insect Swarm"] = 12
     d[n(RAKE) or "Rake"] = 9
     d[n(RIP) or "Rip"] = 12
+    d["Lacerate"] = 15
     d[n(FF_FERAL) or "Faerie Fire (Feral)"] = 40
     d[n(FAERIE_FIRE) or "Faerie Fire"] = 40
     d[n(DEMO_ROAR) or "Demoralizing Roar"] = 30

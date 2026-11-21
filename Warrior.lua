@@ -47,12 +47,7 @@ local function hasMainStrike()
     return false
 end
 
-local function shieldOn()
-    local id = GetInventoryItemID and ns.safe(GetInventoryItemID, "player", 17)
-    if not id then return false end
-    local _, _, _, loc = ns.safe(C_Item.GetItemInfoInstant, id)
-    return loc == "INVTYPE_SHIELD"
-end
+local shieldOn = ns.ShieldOn
 
 -- Defensive Stance, or a shield while in a group (the stance can be hidden in combat)
 local function tanking()
@@ -93,7 +88,7 @@ local function rotation()
     local fighting = ns.flag(UnitAffectingCombat("player"))
     local melee = ns.InMelee(MELEE)
     local tough = ns.TargetIsTough()
-    local lives = ns.Lives(40)
+    local lives = ns.Lives(40, 9)
     local enemies = ns.EnemyCount()
     local r = rage()
 
@@ -131,7 +126,7 @@ local function rotation()
         function() return R(EXECUTE, true) end, -- only lights up under 20 %
         function() return R(OVERPOWER, true) end, -- after a dodge
         function() return R(REVENGE, true) end, -- after a block / dodge / parry
-        function() if tough then return R(DEATH_WISH) end end,
+        function() if tough and ns.Lives(40, 15) then return R(DEATH_WISH) end end,
         function() if tough then return R("Reckless Swings") end end,
         function() if enemies >= 2 then return R(SWEEPING) end end,
         function() return R(MORTAL_STRIKE, true) end,
@@ -142,11 +137,13 @@ local function rotation()
         function() if enemies >= 2 and not ns.DebuffUp(ns.N(THUNDER_CLAP)) then return R(THUNDER_CLAP) end end,
         function() if (tough or enemies >= 2) and not ns.DebuffUp(ns.N(DEMO_SHOUT)) then return R(DEMO_SHOUT) end end,
         function() if rendWanted then return R(REND, true) end end,
-        function() if tough and ns.RecentCasts(ns.N(SUNDER) or "", 30) < 5 then return R(SUNDER, true) end end,
+        function() if tough and ns.Lives(40, 12) and ns.RecentCasts(ns.N(SUNDER) or "", 30) < 5 then return R(SUNDER, true) end end,
         function() if ns.flag(ns.safe(UnitIsPlayer, "target")) and not ns.DebuffUp(ns.N(HAMSTRING)) then return R(HAMSTRING, true) end end,
         function() if spare and enemies >= 2 then return R(CLEAVE, true) end end,
         function() if spare then return R(HEROIC_STRIKE, true) end end,
         function() if spare then return R(SLAM, true) end end,
+        -- rage about to cap with the big strikes on cooldown: Hamstring is the cheapest dump
+        function() if r and r >= 80 and hasMain and not mainStrikeReady() then return R(HAMSTRING, true) end end,
         -- short of rage: what to press when it comes
         function() return ns.Pool(MORTAL_STRIKE, true) end,
         function() return ns.Pool(BLOODTHIRST, true) end,

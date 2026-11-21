@@ -32,6 +32,8 @@ local function anySeal()
     return false
 end
 
+local shieldOn = ns.ShieldOn
+
 local function bestSeal()
     for _, s in ipairs({ SOC, "Seal of Vengeance", "Seal of Blood", SOR }) do
         if ns.Known(s) then return s end
@@ -43,7 +45,7 @@ local function rotation()
     local fighting = ns.flag(UnitAffectingCombat("player"))
     local melee = ns.InMelee(MELEE)
     local tough = ns.TargetIsTough()
-    local lives = ns.Lives(35)
+    local lives = ns.Lives(35, 8)
     local enemies = ns.EnemyCount()
     local ctype = ns.TargetType()
     local seal = anySeal()
@@ -83,10 +85,13 @@ local function rotation()
         function() return R(HAMMER_OF_WRATH, true) end, -- under 20 %
         function() if melee ~= false then return R("Crusader Strike", true) end end,
         function() if melee ~= false then return R("Holy Strike", true) end end,
+        function() return R("Holy Shock", true) end,
+        -- with a shield on, a hard hitter or a pack on you
+        function() if shieldOn() and melee ~= false and (tough or enemies >= 2) and ns.TargetOnMe() ~= false then return R("Holy Shield") end end,
         function() if ctype and UNDEAD[ctype] then return R(EXORCISM, true) end end,
         function() if ctype and UNDEAD[ctype] and enemies >= 2 then return R(HOLY_WRATH) end end,
         function() if enemies >= 2 and melee ~= false then return R(CONSECRATION) end end,
-        function() if tough and melee ~= false then return R(CONSECRATION) end end
+        function() if tough and lives and melee ~= false then return R(CONSECRATION) end end
     )
 end
 

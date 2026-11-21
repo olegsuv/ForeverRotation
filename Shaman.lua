@@ -24,7 +24,7 @@ local function rotation()
     local p = ns.PotionCheck(true); if p then return p end
     local fighting = ns.flag(UnitAffectingCombat("player"))
     local melee = ns.InMelee(MELEE)
-    local lives = ns.Lives(35)
+    local lives = ns.Lives(35, 8)
     local tough = ns.TargetIsTough()
     local enemies = ns.EnemyCount()
     local fsUp = ns.DebuffUp(ns.N(FLAME_SHOCK))
@@ -60,7 +60,10 @@ local function rotation()
         -- totems
         function() if enemies >= 3 and melee ~= false and not totemOut(MAGMA_TOTEM, 20) then return R(MAGMA_TOTEM) end end,
         function() if enemies >= 3 and melee ~= false and not totemOut(FIRE_NOVA_TOTEM, 10) then return R(FIRE_NOVA_TOTEM) end end,
-        function() if lives and enemies < 3 and not totemOut(SEARING_TOTEM, 30) and not totemOut(MAGMA_TOTEM, 20) then return R(SEARING_TOTEM) end end,
+        -- Fire Nova (Forever) bursts from your fire totem
+        function() if enemies >= 2 and (totemOut(SEARING_TOTEM, 30) or totemOut(MAGMA_TOTEM, 20)) then return R("Fire Nova") end end,
+        function() if tough and melee ~= false and ns.Lives(35, 20) and not totemOut(STRENGTH_TOTEM, 120) then return R(STRENGTH_TOTEM) end end,
+        function() if ns.Lives(35, 12) and enemies < 3 and not totemOut(SEARING_TOTEM, 30) and not totemOut(MAGMA_TOTEM, 20) then return R(SEARING_TOTEM) end end,
         -- shocks (shared cooldown)
         function() if lives and not fsUp then return R(FLAME_SHOCK, true) end end,
         function() if fsUp then return R("Lava Burst", true) end end,

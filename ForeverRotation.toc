@@ -4,6 +4,7 @@
 ## Author: olegsuv
 ## Version: @project-version@
 ## SavedVariables: ForeverRotationDB
+## SavedVariablesPerCharacter: ForeverRotationCharDB
 ## IconTexture: Interface\AddOns\ForeverRotation\media\icon
 ## AddonCompartmentFunc: ForeverRotation_OnAddonCompartmentClick
 ## X-License: MIT

@@ -27,7 +27,6 @@ local function spellOf(b)
         return spellID
     end
 end
-ns.ButtonSpell = spellOf
 
 -- an action button holding this spell is lit as active (aspects, auto shot...)
 function ns.ButtonActive(name)
@@ -121,7 +120,7 @@ function ns.RefreshLabels()
         if ns.db.labels and b:IsVisible() then
             local id = spellOf(b)
             if id and ns.Model(id) then
-                if enemies == nil then enemies = ns.EnemyCount(2643) end
+                if enemies == nil then enemies = ns.EnemyCount(ns.aoeRange) end
                 local dps = ns.DPS(id, enemies)
                 if dps then text = ns.Short(dps) end
             end
@@ -138,24 +137,30 @@ local function hotkeyOf(b)
     return t
 end
 
-local function glowButtons(spellID)
+-- also returns the key and the texture of the first such button (the button shows the
+-- potion's item icon, Auto Shot's weapon icon...), nil when none holds it
+local function glowButtons(spellID, noGlow)
     local name = spellID and C_Spell.GetSpellName(spellID)
-    local key
+    local key, tex
     for _, b in ipairs(buttons) do
         local match = false
         if name and b:IsVisible() then
             local id = spellOf(b)
             match = id and C_Spell.GetSpellName(id) == name or false
-            if match and not key then key = hotkeyOf(b) end
+            if match and not tex then
+                key = hotkeyOf(b)
+                local slot = slotOf(b)
+                tex = slot and ns.safe(GetActionTexture, slot)
+            end
         end
-        local on = match and ns.db.glow
+        local on = match and ns.db.glow and not noGlow
         if on and not b.frGlow:IsShown() then
             b.frGlow:Show(); b.frGlow.anim:Play()
         elseif not on and b.frGlow:IsShown() then
             b.frGlow.anim:Stop(); b.frGlow:Hide()
         end
     end
-    return key
+    return key, tex
 end
 
 ---------------------------------------------------------------------------
@@ -191,6 +196,31 @@ function ns.PlaceIcon()
     end
 end
 
+local ARROW = "Interface\\AddOns\\ForeverRotation\\media\\arrow"
+local PLACEHOLDER = "Interface\\AddOns\\ForeverRotation\\media\\icon"
+
+-- spells that do the moving for you: they stay on the square instead of the arrow
+local MOVERS = { 100, 20252, 16979, 36554, 781 } -- Charge, Intercept, Feral Charge, Shadowstep, Disengage
+
+local function isMover(spellID)
+    local n = spellID and C_Spell.GetSpellName(spellID)
+    if not n then return false end
+    for _, id in ipairs(MOVERS) do
+        if C_Spell.GetSpellName(id) == n then return true end
+    end
+    return false
+end
+
+-- "back" / "closer" whenever you have to move (too far, or in the hunter's dead zone with
+-- ammo), whatever the rotation would press; a gap closer shows as the spell instead
+local function moveWanted()
+    if not (ns.db.moveArrow and ns.db.icon and ns.MoveHint) then return nil end
+    local hint = ns.MoveHint()
+    if not hint then return nil end
+    if isMover(ns.suggestion) and ns.InRange(ns.suggestion) ~= false then return nil end
+    return hint
+end
+
 function ns.InitIcon()
     icon = CreateFrame("Frame", "ForeverRotationIcon", UIParent, "BackdropTemplate")
     icon:SetSize(40, 40)
@@ -217,6 +247,11 @@ function ns.InitIcon()
     icon.dmg = icon:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
     icon.dmg:SetPoint("BOTTOMLEFT", 2, 2)
     icon.dmg:SetTextColor(1, 0.85, 0.2)
+    icon.arrow = icon:CreateTexture(nil, "ARTWORK")
+    icon.arrow:SetPoint("TOPLEFT", 2, -2)
+    icon.arrow:SetPoint("BOTTOMRIGHT", -2, 2)
+    icon.arrow:SetTexture(ARROW)
+    icon.arrow:Hide()
     icon.elapsed, icon.tint = 0, 0
     icon:SetScript("OnUpdate", function(self, e)
         self.tint = self.tint + e
@@ -251,9 +286,15 @@ function ns.InitIcon()
         self.elapsed = self.elapsed + e
         if self.elapsed < 0.2 then return end
         self.elapsed = 0
-        local z = ns.db.zone and ns.db.icon and ns.zoneUseful and ns.RangeZone and ns.RangeZone()
+        local z = ns.db.zone and ns.db.icon and ns.zoneUseful and ns.Zone()
         local d = z and ZONES[z]
-        if d then
+        local s = ns.suggestion
+        if ns.db.icon and s and ns.itemSpells[s] and not ns.move and ns.HostileTarget() then
+            -- a potion on the square: say what to do with it, not where the target is
+            self.text:SetText("Use")
+            self.text:SetTextColor(0.3, 1, 0.3)
+            self.text:Show()
+        elseif d then
             self.text:SetText((ns.zoneText and ns.zoneText[z]) or d[1])
             self.text:SetTextColor(d[2], d[3], d[4])
             self.text:Show()
@@ -262,48 +303,39 @@ function ns.InitIcon()
         end
         self:SetScale(ns.db.iconScale or 1)
     end)
-    ns.zoneFrame = zone
 
-    -- arrow over the square: step back (too close to shoot) or step closer (out of reach)
-    local move = CreateFrame("Frame", "ForeverRotationMoveArrow", UIParent)
-    move:SetSize(26, 26)
-    move:SetFrameStrata("MEDIUM")
-    move:SetPoint("BOTTOM", icon, "TOP", 0, 4)
-    move.tex = move:CreateTexture(nil, "ARTWORK")
-    move.tex:SetAllPoints()
-    local bounce = move:CreateAnimationGroup()
-    bounce:SetLooping("BOUNCE")
-    move.slide = bounce:CreateAnimation("Translation")
-    move.slide:SetDuration(0.4)
-    move.bounce = bounce
-    move:Hide()
-    move.elapsed = 0
-    move:SetScript("OnUpdate", nil)
-    local moveDriver = CreateFrame("Frame")
-    moveDriver:SetScript("OnUpdate", function(_, e)
-        move.elapsed = move.elapsed + e
-        if move.elapsed < 0.2 then return end
-        move.elapsed = 0
-        local hint = ns.db.moveArrow and ns.db.icon and ns.MoveHint and ns.MoveHint()
-        if hint ~= move.hint then
-            move.hint = hint
-            move.bounce:Stop()
-            if hint then
-                local down = hint == "back"
-                move.tex:SetTexture(down and "Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up"
-                    or "Interface\\Buttons\\UI-ScrollBar-ScrollUpButton-Up")
-                move.tex:SetTexCoord(0.2, 0.8, 0.2, 0.8)
-                move.slide:SetOffset(0, down and -5 or 5)
-                move:Show()
-                move.bounce:Play()
-            else
-                move:Hide()
-            end
+    -- every 0.1 s: nothing on the square or the buttons without a live hostile target, and a
+    -- big arrow in place of the spell when you have to step back / closer. A new arrow state
+    -- has to hold for 0.3 s before it shows, so it doesn't flicker at the edge of a range.
+    local driver = CreateFrame("Frame")
+    local elapsed, pending, since, shownLive = 0, nil, 0, nil
+    driver:SetScript("OnUpdate", function(_, e)
+        elapsed = elapsed + e
+        if elapsed < 0.1 then return end
+        elapsed = 0
+        local live = ns.HostileTarget()
+        local want = live and moveWanted() or nil
+        local now = GetTime()
+        if want ~= pending then pending, since = want, now end
+        local move = ns.move
+        if not live then move = nil
+        elseif want ~= move and now - since >= 0.3 then move = want end
+        if move ~= ns.move or live ~= shownLive then
+            ns.move, shownLive = move, live
+            ns.ShowSuggestion(ns.suggestion)
         end
-        move:SetScale(ns.db.iconScale or 1)
     end)
 
     ns.UpdateIconLock()
+end
+
+-- green frame while the free square can be dragged, black otherwise
+local function borderColor()
+    if not ns.db.locked and ns.db.iconMode ~= "center" then
+        icon:SetBackdropBorderColor(0.2, 1, 0.3, 1)
+    else
+        icon:SetBackdropBorderColor(0, 0, 0, 1)
+    end
 end
 
 function ns.UpdateIconLock()
@@ -312,27 +344,53 @@ function ns.UpdateIconLock()
     ns.PlaceIcon()
     local movable = not ns.db.locked and ns.db.iconMode ~= "center"
     icon:EnableMouse(movable)
+    borderColor()
     if movable then
-        icon:SetBackdropBorderColor(0.2, 1, 0.3, 1)
         if not ns.suggestion then icon.tex:SetTexture("Interface\\AddOns\\ForeverRotation\\media\\icon") end
         icon:Show()
-    else
-        icon:SetBackdropBorderColor(0, 0, 0, 1)
     end
     ns.ShowSuggestion(ns.suggestion)
 end
 
 function ns.ShowSuggestion(spellID)
-    local key = glowButtons(spellID)
+    local live = ns.HostileTarget()
+    local move = live and ns.move or nil
+    -- Auto Shot already shooting: show it, but don't make it glow (a press would stop it)
+    local name = spellID and C_Spell.GetSpellName(spellID)
+    local idle = name and ns.idleSpell and name == C_Spell.GetSpellName(ns.idleSpell) and ns.ButtonActive(name)
+    local key, btnTex = glowButtons((live and not move) and spellID or nil, idle)
     if not icon then return end
-    if spellID and ns.db.icon then
-        icon.tex:SetTexture(C_Spell.GetSpellTexture(spellID))
-        icon.key:SetText(key or "")
-        local dps = ns.db.labels and ns.DPS(spellID, ns.EnemyCount(2643))
-        icon.dmg:SetText(dps and ns.Short(dps) or "")
+    if live and ns.db.icon and (move or spellID) then
+        if move then
+            -- step closer: green arrow up; step back: red arrow down
+            local back = move == "back"
+            icon.tex:Hide()
+            icon:SetBackdropBorderColor(0, 0, 0, 0) -- the arrow stands on its own, no frame
+            icon.arrow:SetTexCoord(0, 1, back and 1 or 0, back and 0 or 1)
+            if back then icon.arrow:SetVertexColor(1, 0.3, 0.25) else icon.arrow:SetVertexColor(0.3, 1, 0.35) end
+            icon.arrow:Show()
+            icon.key:SetText("")
+            icon.dmg:SetText("")
+        else
+            icon.arrow:Hide()
+            borderColor()
+            icon.tex:SetTexture(btnTex or C_Spell.GetSpellTexture(spellID) or 134400)
+            icon.tex:Show()
+            icon.key:SetText(key or "")
+            local dps = ns.db.labels and ns.DPS(spellID, ns.EnemyCount(ns.aoeRange))
+            icon.dmg:SetText(dps and ns.Short(dps) or "")
+        end
         icon:Show()
     elseif ns.db.locked or ns.db.iconMode == "center" or not ns.db.icon then
         icon:Hide()
+    else -- unlocked free square: the addon icon, so you can drag it
+        icon.arrow:Hide()
+        borderColor()
+        icon.tex:SetTexture(PLACEHOLDER)
+        icon.tex:Show()
+        icon.key:SetText("")
+        icon.dmg:SetText("")
+        icon:Show()
     end
 end
 
@@ -345,7 +403,7 @@ function ns.InitTooltip()
         if not ns.db.labels or not data or not data.id then return end
         local id = data.id
         if ns.isSecret(id) then return end
-        local dps, dmg, exec, note = ns.DPS(id, ns.EnemyCount(2643))
+        local dps, dmg, exec, note = ns.DPS(id, ns.EnemyCount(ns.aoeRange))
         if not dps then return end
         tt:AddLine(("|cffffd633~%s per sec|r  (%s dmg / %.1fs%s)"):format(
             ns.Short(dps), ns.Short(dmg), exec, note and (", " .. note) or ""), 1, 1, 1)
@@ -363,7 +421,7 @@ function ns.Debug()
     local function add(line) out[#out + 1] = line; ns.Print(line) end
     add(("stats: ranged avg %s speed %s RAP %s rCrit %s melee avg %s"):format(
         tostring(s.rAvg), tostring(s.rSpeed), tostring(s.rap), tostring(s.rCrit), tostring(s.mAvg)))
-    add(("enemies: %d, suggestion: %s"):format(ns.EnemyCount(2643), tostring(ns.suggestion and C_Spell.GetSpellName(ns.suggestion))))
+    add(("enemies: %d, suggestion: %s"):format(ns.EnemyCount(ns.aoeRange), tostring(ns.suggestion and C_Spell.GetSpellName(ns.suggestion))))
     local seen = {}
     for _, b in ipairs(buttons) do
         local id = spellOf(b)

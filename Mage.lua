@@ -37,8 +37,7 @@ local function rotation()
     local onMe = ns.TargetOnMe()
     local enemies = ns.EnemyCount()
     local tough = ns.TargetIsTough()
-    local hp = ns.Percent("target")
-    local dying = hp and hp < 15 and not tough
+    local dying = ns.Dying(15, 3)
     local main = s == "fire" and FIREBALL or FROSTBOLT
     if not ns.Known(main) then main = FIREBALL end
     local dry = ns.ManaShort(10, main)
@@ -64,6 +63,7 @@ local function rotation()
         function() if close and onMe == true and ns.LowHealth(50) then return R(ICE_BARRIER) end end,
         function() if dry then return R(EVOCATION) end end,
         -- packs
+        function() if enemies >= 2 and close then return R(BLAST_WAVE) end end,
         function() if enemies >= 3 and close then return R(ARCANE_EXPLOSION) end end,
         function() if enemies >= 2 and close then return R(CONE_OF_COLD) end end,
         function() if enemies >= 3 and s == "fire" then return R(FLAMESTRIKE) end end,
@@ -73,7 +73,7 @@ local function rotation()
         function() if ns.Proc("Ice Lance") or frozen() then return R("Ice Lance", true) end end,
         function() if ns.Proc(MISSILES) then return R(MISSILES, true) end end,
         -- cooldowns on elites
-        function() if tough then return R(COMBUSTION) end end,
+        function() if tough and ns.Lives(35, 15) then return R(COMBUSTION) end end,
         function() if tough then return R(ARCANE_POWER) end end,
         function() if tough then return R(PRESENCE_OF_MIND) end end,
         function() if tough then return R("Icy Veins") end end,

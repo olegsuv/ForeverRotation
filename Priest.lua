@@ -21,9 +21,9 @@ local function shieldedRecently() return ns.RecentCasts(ns.N(PWS) or "", 15) > 0
 local function rotation()
     local p = ns.PotionCheck(true); if p then return p end
     local fighting = ns.flag(UnitAffectingCombat("player"))
-    local lives = ns.Lives(35)
+    local lives = ns.Lives(35, 9)
     local onMe = ns.TargetOnMe()
-    local hp = ns.Percent("target")
+    local tough = ns.TargetIsTough()
     local enemies = ns.EnemyCount()
     local shadow = ns.Known(MIND_FLAY)
     local dry = ns.ManaShort(10, MIND_BLAST)
@@ -48,13 +48,15 @@ local function rotation()
         -- the mob runs at you: shield first
         function() if onMe == true and lives and not shieldedRecently() then return R(PWS) end end,
         function() if ns.Known(SHADOWFORM) and ns.Form() == "" then return R(SHADOWFORM) end end,
-        function() if hp and hp < 25 then return R("Shadow Word: Death", true) end end,
+        function() if ns.Dying(25, 5) then return R("Shadow Word: Death", true) end end,
         function() if dry then return ns.Wand() end end,
         -- DoTs on mobs that live
-        function() if lives and not up(VE) then return R(VE, true) end end,
+        function() if ns.Lives(35, 15) and not up(VE) then return R(VE, true) end end,
         function() if lives and not up(SWP) then return R(SWP, true) end end,
-        function() if lives and not up(DEVOURING) then return R(DEVOURING, true) end end,
+        function() if ns.Lives(35, 12) and not up(DEVOURING) then return R(DEVOURING, true) end end,
+        function() if tough then return R("Inner Focus") end end,
         function() return R(MIND_BLAST, true) end,
+        function() return R("Penance", true) end,
         function() return R("Shadow Word: Death", true) end,
         function() if not shadow and lives and not up(HOLY_FIRE) then return R(HOLY_FIRE, true) end end,
         function() if shadow then return R(MIND_FLAY, true) end end,
