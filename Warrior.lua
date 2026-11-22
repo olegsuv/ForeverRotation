@@ -126,7 +126,7 @@ local function rotation()
         function() return R(EXECUTE, true) end, -- only lights up under 20 %
         function() return R(OVERPOWER, true) end, -- after a dodge
         function() return R(REVENGE, true) end, -- after a block / dodge / parry
-        function() if tough and ns.Lives(40, 15) then return R(DEATH_WISH) end end,
+        function() if ns.BigFight(15) then return R(DEATH_WISH) end end,
         function() if tough then return R("Reckless Swings") end end,
         function() if enemies >= 2 then return R(SWEEPING) end end,
         function() return R(MORTAL_STRIKE, true) end,

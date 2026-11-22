@@ -73,10 +73,10 @@ local function rotation()
         function() if ns.Proc("Ice Lance") or frozen() then return R("Ice Lance", true) end end,
         function() if ns.Proc(MISSILES) then return R(MISSILES, true) end end,
         -- cooldowns on elites
-        function() if tough and ns.Lives(35, 15) then return R(COMBUSTION) end end,
-        function() if tough then return R(ARCANE_POWER) end end,
+        function() if ns.BigFight(15) then return R(COMBUSTION) end end,
+        function() if ns.BigFight(15) then return R(ARCANE_POWER) end end,
         function() if tough then return R(PRESENCE_OF_MIND) end end,
-        function() if tough then return R("Icy Veins") end end,
+        function() if ns.BigFight(20) then return R("Icy Veins") end end,
         -- finish a dying mob with an instant
         function() if dying then return R(FIRE_BLAST, true) end end,
         function() if dying then return R("Ice Lance", true) end end,

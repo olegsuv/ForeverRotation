@@ -47,11 +47,11 @@ local function rotation()
         function() return R(RIPOSTE, true) end, -- after a parry
         -- finishers
         function() if cp >= 1 and lives and sndUp == false and not dying then return R(SND) end end,
-        function() if cp >= 5 and tough then return R(COLD_BLOOD) end end,
+        function() if cp >= 5 and ns.BigFight(15) then return R(COLD_BLOOD) end end,
         function() if cp >= 5 and tough and not ns.DebuffUp(ns.N(EXPOSE)) and ns.RecentCasts(ns.N(EXPOSE) or "", 30) == 0 then return R(EXPOSE, true) end end,
         function() if cp >= 5 or (cp >= 2 and dying) then return R(EVISCERATE, true) end end,
         -- cooldowns
-        function() if tough and sndUp ~= false then return R(ADRENALINE) end end,
+        function() if ns.BigFight() and sndUp ~= false then return R(ADRENALINE) end end,
         function() if enemies >= 2 then return R(FLURRY) end end,
         -- builders
         function() return R("Shank", true) end,

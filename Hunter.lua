@@ -144,9 +144,10 @@ local function rotation()
         function() if lives and not ns.DebuffUp(name(HUNTERS_MARK)) then return ns.Ready(HUNTERS_MARK, true) end end,
         function() if manaOk and stingWorthIt() and lives and not ns.DebuffUp(name(SERPENT_STING)) then return ns.Ready(SERPENT_STING, true) end end,
         -- cooldowns on elites and players
-        function() if tough then return ns.Ready(BESTIAL_WRATH) end end,
+        -- long cooldowns: bosses and elites that take a while, not dungeon trash
+        function() if ns.BigFight() then return ns.Ready(BESTIAL_WRATH) end end,
         function() if tough then return ns.Ready(INTIMIDATION, true) end end,
-        function() if tough or enemies >= 2 then return ns.Ready(RAPID_FIRE) end end,
+        function() if ns.BigFight() then return ns.Ready(RAPID_FIRE) end end,
         -- dying mob: an instant Arcane Shot, not a 2 s cast
         function() if not lives then return ns.Ready(ARCANE_SHOT, true) end end,
         -- Aimed Shot: hardest hit (Multi-Shot instead when it hits more)

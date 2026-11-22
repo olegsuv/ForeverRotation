@@ -818,6 +818,25 @@ function ns.TargetIsTough()
     return ns.flag(ns.safe(UnitIsPlayer, "target")) == true
 end
 
+-- a boss: the classification says so, or a ?? mob inside an instance
+function ns.TargetIsBoss()
+    local cls = ns.safe(UnitClassification, "target")
+    if cls == "worldboss" then return true end
+    if ns.flag(ns.safe(UnitIsBossMob, "target")) == true then return true end
+    local _, instance = IsInInstance()
+    if instance == "party" or instance == "raid" then
+        return ns.num(ns.safe(UnitLevel, "target")) == -1
+    end
+    return false
+end
+
+-- worth a long cooldown: a boss, or an elite / player that will take a while (dungeon trash is
+-- elite too, so being elite alone is not enough)
+function ns.BigFight(secs)
+    if ns.TargetIsBoss() then return true end
+    return ns.TargetIsTough() and ns.Lives(60, secs or 25)
+end
+
 function ns.HostileTarget()
     if not UnitExists("target") then return false end
     if ns.flag(ns.safe(UnitIsDead, "target")) == true then return false end

@@ -54,7 +54,7 @@ local function rotation()
         function() if ns.Lives(35, 15) and not up(VE) then return R(VE, true) end end,
         function() if lives and not up(SWP) then return R(SWP, true) end end,
         function() if ns.Lives(35, 12) and not up(DEVOURING) then return R(DEVOURING, true) end end,
-        function() if tough then return R("Inner Focus") end end,
+        function() if ns.BigFight(15) then return R("Inner Focus") end end,
         function() return R(MIND_BLAST, true) end,
         function() return R("Penance", true) end,
         function() return R("Shadow Word: Death", true) end,
