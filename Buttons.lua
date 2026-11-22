@@ -329,6 +329,17 @@ function ns.InitIcon()
     ns.UpdateIconLock()
 end
 
+-- icon for a suggestion that sits on no action button: a potion shows the item itself (on
+-- Forever the use-spell of an item has no icon of its own, just the game's logo)
+local function suggestionTexture(spellID)
+    local itemID = ns.itemSpells[spellID]
+    if itemID then
+        local tex = ns.safe(C_Item.GetItemIconByID, itemID)
+        if tex then return tex end
+    end
+    return C_Spell.GetSpellTexture(spellID) or 134400
+end
+
 -- green frame while the free square can be dragged, black otherwise
 local function borderColor()
     if not ns.db.locked and ns.db.iconMode ~= "center" then
@@ -374,7 +385,7 @@ function ns.ShowSuggestion(spellID)
         else
             icon.arrow:Hide()
             borderColor()
-            icon.tex:SetTexture(btnTex or C_Spell.GetSpellTexture(spellID) or 134400)
+            icon.tex:SetTexture(btnTex or suggestionTexture(spellID))
             icon.tex:Show()
             icon.key:SetText(key or "")
             local dps = ns.db.labels and ns.DPS(spellID, ns.EnemyCount(ns.aoeRange))

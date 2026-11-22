@@ -855,7 +855,7 @@ local function itemReady(itemID)
     return start == 0 or start + duration <= GetTime()
 end
 
-ns.itemSpells = {} -- use-spells of potions the rotation suggested
+ns.itemSpells = {} -- use-spellID -> itemID of the potions the rotation suggested
 
 -- first item from the list you carry that is off cooldown -> its use-spellID, itemID
 function ns.ReadyItem(list)
@@ -864,7 +864,7 @@ function ns.ReadyItem(list)
         if count and count > 0 and itemReady(itemID) then
             local _, spellID = ns.safe(C_Item.GetItemSpell, itemID)
             if spellID then
-                ns.itemSpells[spellID] = true -- the square's caption says "Use" for these
+                ns.itemSpells[spellID] = itemID -- the square says "Use" and shows the item's icon
                 return spellID, itemID
             end
         end

@@ -1,3 +1,7 @@
+## 0.7.3
+
+- Fixed: a potion that isn't on an action bar showed the game's logo on the square. It now shows the potion's own icon.
+
 ## 0.7.2
 
 - Long cooldowns (Rapid Fire, Bestial Wrath, Death Wish, Combustion, Arcane Power, Icy Veins, Adrenaline Rush, Cold Blood, Inner Focus) are suggested only for a boss, or an elite / player that will take a while. Dungeon trash is elite too, so "elite" alone no longer counts; Rapid Fire is no longer suggested on packs of normal mobs.
