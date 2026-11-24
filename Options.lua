@@ -46,7 +46,7 @@ local function build()
     win:AddHeader("Other")
     win:AddCheck("Collect aggro data (distance and level when mobs aggro)", function() return db.aggroLog end,
         function(v) db.aggroLog = v end)
-    win:AddCheck("Tell the party when you top the damage in a dungeon (once per run, after a boss)",
+    win:AddCheck("Offer a party chat line when you top the damage in a dungeon (one click posts it; once per run, after a boss)",
         function() return db.brag end, function(v) db.brag = v end)
     win:AddCheck("Minimap button", function() return not db.minimapHide end,
         function(v) db.minimapHide = not v; mini:UpdateShown() end)

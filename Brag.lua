@@ -4,6 +4,8 @@ local ADDON, ns = ...
 -- A line in the party chat when you are the group's top damage in a dungeon, the way
 -- Questie announces quest progress. Once per run, right after a boss dies, and only when at
 -- least three people dealt damage. Pets count for their owner. Settings: "Tell the party...".
+-- Forever treats chat from an addon as a protected action, so the line is not sent by the
+-- addon: a small panel offers it and one click on its (secure macro) button posts it.
 ---------------------------------------------------------------------------
 local band = bit.band
 local AFF_GROUP = (COMBATLOG_OBJECT_AFFILIATION_MINE or 0x1) + (COMBATLOG_OBJECT_AFFILIATION_PARTY or 0x2)
@@ -50,6 +52,48 @@ local function noteBoss(unit)
     if guid then bosses[guid] = UnitName(unit) or "the boss" end
 end
 
+-- the offer: text + a secure button whose macro posts it (addons can't post chat on Forever)
+local panel, pending
+local function buildPanel()
+    panel = CreateFrame("Frame", "ForeverRotationBrag", UIParent, "BackdropTemplate")
+    panel:SetSize(380, 70)
+    panel:SetPoint("TOP", UIParent, "TOP", 0, -140)
+    panel:SetFrameStrata("DIALOG")
+    panel:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+    panel:SetBackdropColor(0.05, 0.05, 0.08, 0.92)
+    panel:SetBackdropBorderColor(1, 0.55, 0.1, 1)
+    panel.text = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    panel.text:SetPoint("TOPLEFT", 10, -8)
+    panel.text:SetPoint("TOPRIGHT", -26, -8)
+    panel.text:SetJustifyH("LEFT")
+    panel.text:SetWordWrap(true)
+    local close = CreateFrame("Button", nil, panel, "UIPanelCloseButton")
+    close:SetPoint("TOPRIGHT", 2, 2)
+    close:SetScript("OnClick", function() panel:Hide() end)
+    local btn = CreateFrame("Button", "ForeverRotationBragSend", panel, "SecureActionButtonTemplate, UIPanelButtonTemplate")
+    btn:SetSize(130, 22)
+    btn:SetPoint("BOTTOM", 0, 6)
+    btn:SetText("Tell the party")
+    btn:RegisterForClicks("AnyUp", "AnyDown")
+    btn:SetAttribute("type", "macro")
+    btn:HookScript("OnClick", function() panel:Hide() end)
+    panel.btn = btn
+    panel:Hide()
+end
+
+local function offer(msg)
+    if InCombatLockdown() then pending = msg; return end -- the button's macro can't change in combat
+    pending = nil
+    if not panel then buildPanel() end
+    local slash = "/p "
+    if IsInGroup(LE_PARTY_CATEGORY_INSTANCE) then slash = "/i "
+    elseif IsInRaid() then slash = "/raid " end
+    panel.btn:SetAttribute("macrotext", slash .. msg)
+    panel.text:SetText(msg)
+    panel:Show()
+    C_Timer.After(90, function() if panel.text:GetText() == msg then panel:Hide() end end)
+end
+
 local function announce(bossName)
     if said or not ns.db.brag then return end
     local me = UnitGUID("player")
@@ -68,10 +112,7 @@ local function announce(bossName)
     local share = math.floor(mine / total * 100 + 0.5)
     local msg = ("Forever Rotation helped me keep the top damage in %s: %d%% of the group's, %s down."):format(
         instanceName or "this dungeon", share, bossName)
-    local channel = "PARTY"
-    if IsInGroup(LE_PARTY_CATEGORY_INSTANCE) then channel = "INSTANCE_CHAT"
-    elseif IsInRaid() then channel = "RAID" end
-    pcall(SendChatMessage, msg, channel)
+    offer(msg)
 end
 
 local function onCombatLog()
@@ -106,8 +147,11 @@ f:RegisterEvent("PLAYER_TARGET_CHANGED")
 f:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 f:RegisterEvent("UNIT_PET")
 f:RegisterEvent("GROUP_ROSTER_UPDATE")
+f:RegisterEvent("PLAYER_REGEN_ENABLED")
 f:SetScript("OnEvent", function(_, event, arg1)
-    if event == "PLAYER_ENTERING_WORLD" then
+    if event == "PLAYER_REGEN_ENABLED" then
+        if pending then offer(pending) end
+    elseif event == "PLAYER_ENTERING_WORLD" then
         local _, kind = IsInInstance()
         local now = kind == "party" or kind == "raid"
         if now ~= inside then

@@ -1,3 +1,7 @@
+## 0.9.1
+
+- Fixed: "ForeverRotation has been blocked from an action only available to the Blizzard UI" after a boss in a dungeon. Forever doesn't let addons post to the chat, so the top-damage line is no longer sent by the addon: a small panel offers it and one click on its button posts it.
+
 ## 0.9.0
 
 - Second square, right of the first, with an orange frame: a long cooldown that is due (Rapid Fire, Bestial Wrath, Death Wish, Arcane Power... anything with a base cooldown of 90 s or more). The first square keeps the next spell, so a cooldown never hides what to cast. Its button glows too.
