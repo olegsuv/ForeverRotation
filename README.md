@@ -9,6 +9,8 @@ Small helper for **WoW Forever** (Interface 16001):
   leveling guides:
   - **Hunter** – Mark and Sting only on mobs that live, Aimed Shot vs Multi-Shot by damage, hawks,
     melee weaving, aspect reminder, range zone icon by the nameplate.
+- In a dungeon, a party chat line when you are the group's top damage (once per run, after a
+    boss; off in Settings).
   - **Warrior** – Shout, Charge, Victory Rush, Execute / Overpower / Revenge, Mortal Strike / Bloodthirst,
     Rend, AoE on packs, Heroic Strike only with spare rage, interrupts.
   - **Rogue** – openers, Slice and Dice, Shank, Sinister Strike to 5 points, Eviscerate, cooldowns, Kick.

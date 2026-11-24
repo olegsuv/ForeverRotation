@@ -1,3 +1,7 @@
+## 0.8.0
+
+- A line in the party chat when you are the group's top damage in a dungeon (like Questie's quest announcements): once per run, right after a boss dies, with at least three people dealing damage. Pets count for their owner. Settings: "Tell the party when you top the damage".
+
 ## 0.7.4
 
 - Hunter: Auto Shot no longer flashes on the square between two shots. The game reports it as running only part of the time, so a sighting now counts for one full shot (a new target starts over).

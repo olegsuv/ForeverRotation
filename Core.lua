@@ -16,6 +16,7 @@ ns.DEFAULTS = {
     selfHeal = 35,     -- healers / hybrids: suggest a self-heal below this % health
     trace = true,      -- keep a short log of rotation decisions in SavedVariables (debug)
     aggroLog = true,   -- log at what distance / level mobs aggro on you (data for an aggro indicator)
+    brag = true,       -- party chat line when you top the damage in a dungeon (once per run, after a boss)
 }
 
 local GetTime, pcall, ipairs, pairs, type = GetTime, pcall, ipairs, pairs, type
