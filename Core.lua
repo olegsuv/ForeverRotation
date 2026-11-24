@@ -147,7 +147,6 @@ function ns.Ready(spell, checkRange)
     if not id then return false end
     if not ns.Usable(id) then return false end
     if ns.OnCooldown(id) then return false end
-    if ns.Immune(id) then return false end
     if checkRange and ns.InRange(id) == false then return false end
     return true, id
 end
@@ -369,32 +368,6 @@ function ns.TargetType()
     if t and not isSecret(t) then return t end
     local npc = ns.NpcID(UnitGUID("target"))
     return npc and ns.db and ns.db.ctype and ns.db.ctype[npc] or nil
-end
-
--- Immunities learned from the combat log: a spell of yours that an npc shrugged off
--- ("immune") is not suggested on that npc kind again. /frot immune lists and clears them.
-function ns.Immune(id)
-    local list = ns.cdb and ns.cdb.immune
-    if not list then return false end
-    local npc = ns.NpcID(UnitGUID("target"))
-    if not npc then return false end
-    local n = C_Spell.GetSpellName(id)
-    return n ~= nil and list[npc .. ":" .. n] == true
-end
-
-local function onCombatLog()
-    local ok, _, sub, _, srcGUID, _, _, _, dstGUID, dstName, _, _, _, spellName, _, missType = pcall(CombatLogGetCurrentEventInfo)
-    if not ok or sub ~= "SPELL_MISSED" or missType ~= "IMMUNE" then return end
-    if not ns.cdb or srcGUID ~= UnitGUID("player") then return end
-    local npc = ns.NpcID(dstGUID)
-    if not npc or type(spellName) ~= "string" then return end
-    ns.cdb.immune = ns.cdb.immune or {}
-    local key = npc .. ":" .. spellName
-    if not ns.cdb.immune[key] then
-        ns.cdb.immune[key] = true
-        ns.cdb.immuneNames = ns.cdb.immuneNames or {}
-        ns.cdb.immuneNames[key] = tostring(dstName)
-    end
 end
 
 local BLEED_IMMUNE = { Mechanical = true, Elemental = true, ["Механизм"] = true, ["Элементаль"] = true }
@@ -964,16 +937,15 @@ end
 
 -- "blocked from an action only available to the Blizzard UI": what and from where. The
 -- event and the popup both lead here; the stack at that moment names the caller.
+local blockedEarly = {} -- refusals before the saved variables are loaded
 function ns.NoteBlocked(how, a, b, c)
     local line = ("%s %s: %s %s %s"):format(date("%H:%M:%S"), tostring(how), tostring(a), tostring(b), tostring(c))
     local where = debugstack(3, 8, 0) or "?"
     if a == ADDON or b == ADDON then ns.Print(line) end
-    if ns.cdb then
-        ns.cdb.blocked = ns.cdb.blocked or {}
-        local t = ns.cdb.blocked
-        t[#t + 1] = line .. "\n" .. where
-        while #t > 20 do table.remove(t, 1) end
-    end
+    local t = ns.cdb and ns.cdb.blocked or blockedEarly
+    if ns.cdb then ns.cdb.blocked = t end
+    t[#t + 1] = line .. "\n" .. where
+    while #t > 20 do table.remove(t, 1) end
 end
 
 if hooksecurefunc and StaticPopup_Show then
@@ -1063,6 +1035,11 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
         ForeverRotationCharDB = ForeverRotationCharDB or {}
         ns.cdb = ForeverRotationCharDB
         ns.cdb.buffExp = ns.cdb.buffExp or {}
+        ns.cdb.immune, ns.cdb.immuneNames = nil, nil -- 0.9.6: no combat log on Forever
+        for _, line in ipairs(blockedEarly) do
+            ns.cdb.blocked = ns.cdb.blocked or {}
+            table.insert(ns.cdb.blocked, line)
+        end
         lastExclusive = ns.cdb.lastAspect
         ns.db.buffExp, ns.db.lastAspect, ns.db.killTimes = nil, nil, nil
         if not ns.db.migratedZoneText then -- 0.2.6: zone text under the square off, icon by the nameplate instead
@@ -1093,8 +1070,6 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
         ns.NoteCreatureType("target")
     elseif event == "UPDATE_MOUSEOVER_UNIT" then
         ns.NoteCreatureType("mouseover")
-    elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
-        onCombatLog()
     elseif event == "ADDON_ACTION_FORBIDDEN" or event == "ADDON_ACTION_BLOCKED" then
         -- which call the game refused, and from where: printed, and kept for /frot blocked
         ns.NoteBlocked(event, arg1, arg2, arg3)
@@ -1114,11 +1089,10 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
 end)
 
 for _, e in ipairs({
-    "ADDON_LOADED", "PLAYER_LOGIN", "SPELLS_CHANGED", "LEARNED_SPELL_IN_SKILL_LINE",
+    "ADDON_ACTION_FORBIDDEN", "ADDON_ACTION_BLOCKED", "ADDON_LOADED", "PLAYER_LOGIN", "SPELLS_CHANGED", "LEARNED_SPELL_IN_SKILL_LINE",
     "PLAYER_TARGET_CHANGED", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_DEAD",
     "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_PAGE_CHANGED", "UPDATE_BONUS_ACTIONBAR",
-    "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "PLAYER_LEVEL_UP", "COMBAT_LOG_EVENT_UNFILTERED",
-    "ADDON_ACTION_FORBIDDEN", "ADDON_ACTION_BLOCKED", "UPDATE_MOUSEOVER_UNIT",
+    "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "PLAYER_LEVEL_UP", "UPDATE_MOUSEOVER_UNIT",
 }) do
     pcall(frame.RegisterEvent, frame, e)
 end
@@ -1142,7 +1116,6 @@ local HELP = {
     "/frot trace - keep a log of rotation decisions (for bug reports) on/off",
     "/frot aggro - what the aggro log has collected so far",
     "/frot spells - save your spellbook (name and id) for bug reports",
-    "/frot immune [clear] - immunities learned from the combat log",
     "/frot blocked - what the game refused the addon, and from where",
 }
 
@@ -1174,21 +1147,6 @@ SlashCmdList.FOREVERROTATION = function(msg)
         local t = ns.cdb and ns.cdb.blocked
         if not t or #t == 0 then ns.Print("nothing blocked so far") end
         for _, line in ipairs(t or {}) do ns.Print(line) end
-    elseif cmd == "immune" then
-        local list = ns.cdb and ns.cdb.immune
-        if arg == "clear" then
-            if ns.cdb then ns.cdb.immune, ns.cdb.immuneNames = nil, nil end
-            ns.Print("learned immunities forgotten")
-        elseif not list or not next(list) then
-            ns.Print("no learned immunities yet (an \"immune\" miss of yours teaches one)")
-        else
-            local names = ns.cdb.immuneNames or {}
-            for key in pairs(list) do
-                local npc, spell = key:match("^(%d+):(.+)$")
-                ns.Print(("%s (npc %s): %s"):format(names[key] or "?", npc or "?", spell or key))
-            end
-            ns.Print("/frot immune clear forgets them")
-        end
     elseif cmd == "spells" then
         ns.ScanSpellbook()
         local out = {}

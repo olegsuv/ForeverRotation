@@ -1,3 +1,9 @@
+## 0.9.6
+
+- Fixed: "ForeverRotation has been blocked from an action only available to the Blizzard UI" at every load. Forever does not let addons read the combat log, and the addon asked for it since 0.8.0 (in dungeons) and 0.9.0 (everywhere). The combat log is gone from the addon.
+- With it go the learned immunities (0.9.0). Serpent Sting relies on the remembered creature types.
+- The top-damage party line now takes its numbers from Details! (the boss fight's segment); without Details it does nothing. The boss's death is read off the target.
+
 ## 0.9.5
 
 - The "blocked from an action" popup is caught at the popup too (the event did not reach the addon); `/frot blocked` keeps the call stack.

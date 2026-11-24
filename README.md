@@ -10,9 +10,8 @@ Small helper for **WoW Forever** (Interface 16001):
   - **Hunter** – Mark and Sting only on mobs that live, Aimed Shot vs Multi-Shot by damage, hawks,
     melee weaving, aspect reminder, range zone icon by the nameplate.
 - Long cooldowns on a second square with an orange frame, so they never hide the next spell.
-- Immunities learned from the combat log: a spell a mob kind is immune to is not suggested on it again.
-- In a dungeon, when you are the group's top damage after a boss: a small panel offers a party
-    chat line, one click posts it (once per run; off in Settings).
+- In a dungeon, when you are the group's top damage on a boss (numbers from Details!): a small
+    panel offers a party chat line, one click posts it (once per run; off in Settings).
   - **Warrior** – Shout, Charge, Victory Rush, Execute / Overpower / Revenge, Mortal Strike / Bloodthirst,
     Rend, AoE on packs, Heroic Strike only with spare rage, interrupts.
   - **Rogue** – openers, Slice and Dice, Shank, Sinister Strike to 5 points, Eviscerate, cooldowns, Kick.
