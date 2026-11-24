@@ -1,3 +1,7 @@
+## 0.9.4
+
+- The "blocked from an action" popup is caught at the popup too (the event did not reach the addon); `/frot blocked` keeps the call stack.
+
 ## 0.9.3
 
 - Creature types are remembered for the whole account, also from mouseover and from what the aggro log has already seen, so Serpent Sting stays off mechanicals you have met before.

@@ -962,6 +962,27 @@ function ns.AutoShooting(id)
     return now - shotSeen < math.max(speed, 1) + 0.5
 end
 
+-- "blocked from an action only available to the Blizzard UI": what and from where. The
+-- event and the popup both lead here; the stack at that moment names the caller.
+function ns.NoteBlocked(how, a, b, c)
+    local line = ("%s %s: %s %s %s"):format(date("%H:%M:%S"), tostring(how), tostring(a), tostring(b), tostring(c))
+    local where = debugstack(3, 8, 0) or "?"
+    if a == ADDON or b == ADDON then ns.Print(line) end
+    if ns.cdb then
+        ns.cdb.blocked = ns.cdb.blocked or {}
+        local t = ns.cdb.blocked
+        t[#t + 1] = line .. "
+" .. where
+        while #t > 20 do table.remove(t, 1) end
+    end
+end
+
+if hooksecurefunc and StaticPopup_Show then
+    hooksecurefunc("StaticPopup_Show", function(which, a, b)
+        if which == "ADDON_ACTION_FORBIDDEN" or which == "ADDON_ACTION_BLOCKED" then ns.NoteBlocked("popup " .. which, a, b) end
+    end)
+end
+
 ns.itemSpells = {} -- use-spellID -> itemID of the potions the rotation suggested
 
 -- first item from the list you carry that is off cooldown -> its use-spellID, itemID
@@ -1076,15 +1097,8 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
         onCombatLog()
     elseif event == "ADDON_ACTION_FORBIDDEN" or event == "ADDON_ACTION_BLOCKED" then
-        -- which call the game refused us, and from where: printed, and kept for /frot blocked
-        if arg1 == ADDON then
-            local where = debugstack(2, 6, 0) or "?"
-            ns.Print(("%s: %s"):format(event, tostring(arg2)))
-            ns.cdb.blocked = ns.cdb.blocked or {}
-            local t = ns.cdb.blocked
-            t[#t + 1] = ("%s %s | %s"):format(date("%H:%M:%S"), tostring(arg2), where)
-            while #t > 20 do table.remove(t, 1) end
-        end
+        -- which call the game refused, and from where: printed, and kept for /frot blocked
+        ns.NoteBlocked(event, arg1, arg2, arg3)
     elseif event == "NAME_PLATE_UNIT_ADDED" then
         plates[arg1] = true
         ns.NoteCreatureType(arg1)
