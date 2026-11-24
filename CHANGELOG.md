@@ -1,3 +1,8 @@
+## 0.7.4
+
+- Hunter: Auto Shot no longer flashes on the square between two shots. The game reports it as running only part of the time, so a sighting now counts for one full shot (a new target starts over).
+- The range line under the square ("Shoot", "Too far"...) is shown only while the square shows something; no caption on its own.
+
 ## 0.7.3
 
 - Fixed: a potion that isn't on an action bar showed the game's logo on the square. It now shows the potion's own icon.

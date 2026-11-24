@@ -855,6 +855,23 @@ local function itemReady(itemID)
     return start == 0 or start + duration <= GetTime()
 end
 
+-- Is the auto-repeat spell (Auto Shot) running? The game reports it as "current" only part
+-- of the time between two shots, so a sighting counts for one full shot after it; a new
+-- target starts over.
+local shotSeen, shotTarget = 0, nil
+function ns.AutoShooting(id)
+    local now = GetTime()
+    local guid = UnitGUID("target")
+    if guid ~= shotTarget then shotTarget, shotSeen = guid, 0 end
+    local on = false
+    if C_Spell.IsCurrentSpell and ns.flag(ns.safe(C_Spell.IsCurrentSpell, id)) then on = true end
+    if not on and C_Spell.IsAutoRepeatSpell and ns.flag(ns.safe(C_Spell.IsAutoRepeatSpell, id)) then on = true end
+    if not on and ns.ButtonActive and ns.ButtonActive(C_Spell.GetSpellName(id)) then on = true end
+    if on then shotSeen = now; return true end
+    local speed = ns.num(ns.safe(UnitRangedDamage, "player")) or 0
+    return now - shotSeen < math.max(speed, 1) + 0.5
+end
+
 ns.itemSpells = {} -- use-spellID -> itemID of the potions the rotation suggested
 
 -- first item from the list you carry that is off cooldown -> its use-spellID, itemID

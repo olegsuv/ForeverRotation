@@ -36,6 +36,7 @@ function ns.ButtonActive(name)
             local id = spellOf(b)
             if id and C_Spell.GetSpellName(id) == name then
                 if ns.flag(ns.safe(IsCurrentAction, slot)) then return true end
+                if IsAutoRepeatAction and ns.flag(ns.safe(IsAutoRepeatAction, slot)) then return true end
             end
         end
     end
@@ -269,7 +270,7 @@ function ns.InitIcon()
     end)
     icon:Hide()
 
-    -- range zone line under the square (shown whenever there is a hostile target)
+    -- range zone line under the square (only while the square shows something)
     local zone = CreateFrame("Frame", nil, UIParent)
     zone:SetSize(120, 16)
     zone:SetPoint("TOP", icon, "BOTTOM", 0, -3)
@@ -286,10 +287,12 @@ function ns.InitIcon()
         self.elapsed = self.elapsed + e
         if self.elapsed < 0.2 then return end
         self.elapsed = 0
-        local z = ns.db.zone and ns.db.icon and ns.zoneUseful and ns.Zone()
+        -- only under a square that shows something: no caption on its own
+        local shown = ns.db.icon and ns.HostileTarget() and (ns.move or ns.suggestion)
+        local z = shown and ns.db.zone and ns.zoneUseful and ns.Zone()
         local d = z and ZONES[z]
         local s = ns.suggestion
-        if ns.db.icon and s and ns.itemSpells[s] and not ns.move and ns.HostileTarget() then
+        if shown and s and ns.itemSpells[s] and not ns.move then
             -- a potion on the square: say what to do with it, not where the target is
             self.text:SetText("Use")
             self.text:SetTextColor(0.3, 1, 0.3)

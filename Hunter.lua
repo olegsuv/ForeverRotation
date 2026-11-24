@@ -161,10 +161,9 @@ local function rotation()
         -- nothing to cast and Auto Shot not running: start it (its button's weapon icon)
         function()
             if zone ~= "shoot" then return end
-            local n, id = ns.Spell(AUTO_SHOT)
+            local _, id = ns.Spell(AUTO_SHOT)
             if not id then return end
-            if C_Spell.IsCurrentSpell and ns.flag(ns.safe(C_Spell.IsCurrentSpell, id)) then return end
-            if ns.ButtonActive(n) then return end
+            if ns.AutoShooting(id) then return end
             return true, id
         end
     )
