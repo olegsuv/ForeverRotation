@@ -1059,6 +1059,16 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
         ns.NoteCreatureType("target")
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
         onCombatLog()
+    elseif event == "ADDON_ACTION_FORBIDDEN" or event == "ADDON_ACTION_BLOCKED" then
+        -- which call the game refused us, and from where: printed, and kept for /frot blocked
+        if arg1 == ADDON then
+            local where = debugstack(2, 6, 0) or "?"
+            ns.Print(("%s: %s"):format(event, tostring(arg2)))
+            ns.cdb.blocked = ns.cdb.blocked or {}
+            local t = ns.cdb.blocked
+            t[#t + 1] = ("%s %s | %s"):format(date("%H:%M:%S"), tostring(arg2), where)
+            while #t > 20 do table.remove(t, 1) end
+        end
     elseif event == "NAME_PLATE_UNIT_ADDED" then
         plates[arg1] = true
         ns.NoteCreatureType(arg1)
@@ -1079,6 +1089,7 @@ for _, e in ipairs({
     "PLAYER_TARGET_CHANGED", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_DEAD",
     "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_PAGE_CHANGED", "UPDATE_BONUS_ACTIONBAR",
     "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "PLAYER_LEVEL_UP", "COMBAT_LOG_EVENT_UNFILTERED",
+    "ADDON_ACTION_FORBIDDEN", "ADDON_ACTION_BLOCKED",
 }) do
     pcall(frame.RegisterEvent, frame, e)
 end
@@ -1103,6 +1114,7 @@ local HELP = {
     "/frot aggro - what the aggro log has collected so far",
     "/frot spells - save your spellbook (name and id) for bug reports",
     "/frot immune [clear] - immunities learned from the combat log",
+    "/frot blocked - what the game refused the addon, and from where",
 }
 
 local function toggle(key)
@@ -1129,6 +1141,10 @@ SlashCmdList.FOREVERROTATION = function(msg)
         ns.Debug()
     elseif cmd == "aggro" then
         if ns.AggroStats then ns.AggroStats() end
+    elseif cmd == "blocked" then
+        local t = ns.cdb and ns.cdb.blocked
+        if not t or #t == 0 then ns.Print("nothing blocked so far") end
+        for _, line in ipairs(t or {}) do ns.Print(line) end
     elseif cmd == "immune" then
         local list = ns.cdb and ns.cdb.immune
         if arg == "clear" then

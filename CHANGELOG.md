@@ -1,3 +1,7 @@
+## 0.9.2
+
+- When the game refuses the addon an action ("blocked from an action only available to the Blizzard UI"), the chat says which call it was and `/frot blocked` shows where it came from, so it can be fixed.
+
 ## 0.9.1
 
 - Fixed: "ForeverRotation has been blocked from an action only available to the Blizzard UI" after a boss in a dungeon. Forever doesn't let addons post to the chat, so the top-damage line is no longer sent by the addon: a small panel offers it and one click on its button posts it.
