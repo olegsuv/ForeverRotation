@@ -1,3 +1,7 @@
+## 0.9.3
+
+- Creature types are remembered for the whole account, also from mouseover and from what the aggro log has already seen, so Serpent Sting stays off mechanicals you have met before.
+
 ## 0.9.2
 
 - When the game refuses the addon an action ("blocked from an action only available to the Blizzard UI"), the chat says which call it was and `/frot blocked` shows where it came from, so it can be fixed.

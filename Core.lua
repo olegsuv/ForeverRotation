@@ -341,14 +341,26 @@ function ns.NpcID(guid)
 end
 
 -- creature type of the target. The game hides it in combat, so it is remembered per npc
--- (seen out of combat, on target or a nameplate) and used from there.
+-- kind (target, mouseover, nameplate, and what the aggro log saw), for the whole account.
 function ns.NoteCreatureType(unit)
     local t = ns.safe(UnitCreatureType, unit)
     if not t or isSecret(t) then return end
     local npc = ns.NpcID(UnitGUID(unit))
-    if npc and ns.cdb then
-        ns.cdb.ctype = ns.cdb.ctype or {}
-        ns.cdb.ctype[npc] = t
+    if npc and ns.db then
+        ns.db.ctype = ns.db.ctype or {}
+        ns.db.ctype[npc] = t
+    end
+end
+
+-- what the aggro log already knows (it has seen hundreds of mobs with their type)
+local function seedCreatureTypes()
+    local log = ns.db.aggroData
+    if type(log) ~= "table" then return end
+    ns.db.ctype = ns.db.ctype or {}
+    for _, m in ipairs(log) do
+        if type(m) == "table" and m.npc and type(m.type) == "string" and not ns.db.ctype[m.npc] then
+            ns.db.ctype[m.npc] = m.type
+        end
     end
 end
 
@@ -356,7 +368,7 @@ function ns.TargetType()
     local t = ns.safe(UnitCreatureType, "target")
     if t and not isSecret(t) then return t end
     local npc = ns.NpcID(UnitGUID("target"))
-    return npc and ns.cdb and ns.cdb.ctype and ns.cdb.ctype[npc] or nil
+    return npc and ns.db and ns.db.ctype and ns.db.ctype[npc] or nil
 end
 
 -- Immunities learned from the combat log: a spell of yours that an npc shrugged off
@@ -1038,6 +1050,8 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
             ns.db.migratedZoneText = true
         end
     elseif event == "PLAYER_LOGIN" then
+        ns.cdb.ctype = nil -- 0.9.3: creature types are kept for the account
+        seedCreatureTypes()
         ns.ScanSpellbook()
         if ns.InitClass then ns.InitClass() end
         -- the range zone means something only when you also fight from range (not pure melee)
@@ -1057,6 +1071,8 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
         ns.ResetComboEstimate()
         ns.labelsDirty = true
         ns.NoteCreatureType("target")
+    elseif event == "UPDATE_MOUSEOVER_UNIT" then
+        ns.NoteCreatureType("mouseover")
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
         onCombatLog()
     elseif event == "ADDON_ACTION_FORBIDDEN" or event == "ADDON_ACTION_BLOCKED" then
@@ -1089,7 +1105,7 @@ for _, e in ipairs({
     "PLAYER_TARGET_CHANGED", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_DEAD",
     "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_PAGE_CHANGED", "UPDATE_BONUS_ACTIONBAR",
     "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "PLAYER_LEVEL_UP", "COMBAT_LOG_EVENT_UNFILTERED",
-    "ADDON_ACTION_FORBIDDEN", "ADDON_ACTION_BLOCKED",
+    "ADDON_ACTION_FORBIDDEN", "ADDON_ACTION_BLOCKED", "UPDATE_MOUSEOVER_UNIT",
 }) do
     pcall(frame.RegisterEvent, frame, e)
 end
