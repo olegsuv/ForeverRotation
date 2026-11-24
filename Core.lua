@@ -147,6 +147,7 @@ function ns.Ready(spell, checkRange)
     if not id then return false end
     if not ns.Usable(id) then return false end
     if ns.OnCooldown(id) then return false end
+    if ns.Immune(id) then return false end
     if checkRange and ns.InRange(id) == false then return false end
     return true, id
 end
@@ -225,11 +226,33 @@ end
 ---------------------------------------------------------------------------
 
 -- first function that answers ok, id wins
+-- base cooldown in seconds (0 when none / unknown), cached
+local baseCD = {}
+function ns.BaseCooldown(id)
+    local v = baseCD[id]
+    if v == nil then
+        local ms = GetSpellBaseCooldown and ns.num(ns.safe(GetSpellBaseCooldown, id))
+        v = ms and ms / 1000 or 0
+        baseCD[id] = v
+    end
+    return v
+end
+
+ns.LONG_CD = 90 -- seconds: from here on a spell goes to the second square, not the first
+
+-- first entry that says yes. A spell with a long cooldown (Rapid Fire, Bestial Wrath, Death
+-- Wish...) is held for the second square and the walk goes on: the next spell is still due.
 function ns.first(...)
     for i = 1, select("#", ...) do
         local f = select(i, ...)
         local ok, id = f()
-        if ok then return id end
+        if ok then
+            if id and ns.BaseCooldown(id) >= ns.LONG_CD then
+                if not ns.cdPick then ns.cdPick = id end
+            else
+                return id
+            end
+        end
     end
 end
 
@@ -310,10 +333,56 @@ function ns.TargetOnMe()
     return nil
 end
 
--- creature type of the target, nil when hidden
+-- npc id out of a creature guid, nil for players and pets
+function ns.NpcID(guid)
+    if type(guid) ~= "string" then return nil end
+    local kind, id = guid:match("^(%a+)%-%d+%-%d+%-%d+%-%d+%-(%d+)")
+    if kind == "Creature" or kind == "Vehicle" then return tonumber(id) end
+end
+
+-- creature type of the target. The game hides it in combat, so it is remembered per npc
+-- (seen out of combat, on target or a nameplate) and used from there.
+function ns.NoteCreatureType(unit)
+    local t = ns.safe(UnitCreatureType, unit)
+    if not t or isSecret(t) then return end
+    local npc = ns.NpcID(UnitGUID(unit))
+    if npc and ns.cdb then
+        ns.cdb.ctype = ns.cdb.ctype or {}
+        ns.cdb.ctype[npc] = t
+    end
+end
+
 function ns.TargetType()
     local t = ns.safe(UnitCreatureType, "target")
     if t and not isSecret(t) then return t end
+    local npc = ns.NpcID(UnitGUID("target"))
+    return npc and ns.cdb and ns.cdb.ctype and ns.cdb.ctype[npc] or nil
+end
+
+-- Immunities learned from the combat log: a spell of yours that an npc shrugged off
+-- ("immune") is not suggested on that npc kind again. /frot immune lists and clears them.
+function ns.Immune(id)
+    local list = ns.cdb and ns.cdb.immune
+    if not list then return false end
+    local npc = ns.NpcID(UnitGUID("target"))
+    if not npc then return false end
+    local n = C_Spell.GetSpellName(id)
+    return n ~= nil and list[npc .. ":" .. n] == true
+end
+
+local function onCombatLog()
+    local ok, _, sub, _, srcGUID, _, _, _, dstGUID, dstName, _, _, _, spellName, _, missType = pcall(CombatLogGetCurrentEventInfo)
+    if not ok or sub ~= "SPELL_MISSED" or missType ~= "IMMUNE" then return end
+    if not ns.cdb or srcGUID ~= UnitGUID("player") then return end
+    local npc = ns.NpcID(dstGUID)
+    if not npc or type(spellName) ~= "string" then return end
+    ns.cdb.immune = ns.cdb.immune or {}
+    local key = npc .. ":" .. spellName
+    if not ns.cdb.immune[key] then
+        ns.cdb.immune[key] = true
+        ns.cdb.immuneNames = ns.cdb.immuneNames or {}
+        ns.cdb.immuneNames[key] = tostring(dstName)
+    end
 end
 
 local BLEED_IMMUNE = { Mechanical = true, Elemental = true, ["Механизм"] = true, ["Элементаль"] = true }
@@ -598,24 +667,32 @@ ns.HEAL_POTIONS = { 13446, 3928, 1710, 929, 858, 118 }
 -- usesMana: the class runs on mana
 -- usesMana: the class drinks mana potions; probes: basic spells whose "no mana" answer stands
 -- in for the mana number when the game hides it
+-- healing potion when low: before anything else. The mana potion waits until the rotation
+-- has nothing left to cast (ns.ManaPotion, called from the update loop).
 function ns.PotionCheck(usesMana, probes)
+    ns.usesMana, ns.manaProbes = usesMana, probes
     if not ns.db.potions then return nil end
     if not ns.flag(UnitAffectingCombat("player")) then return nil end
     local hp = ns.Percent("player")
     if hp and hp < ns.db.potionHealth then
         local s = ns.ReadyItem(ns.HEAL_POTIONS); if s then return s end
     end
-    if usesMana then
-        local mana = ns.Percent("player", Enum.PowerType.Mana)
-        local short = mana and mana < ns.db.potionMana
-        if mana == nil and probes then
-            for _, p in ipairs(probes) do
-                if ns.NoResource(p) then short = true; break end
-            end
+end
+
+-- mana potion: mana under the threshold (or the probe spells say "no mana" when it is
+-- hidden), on a mob that will live, in combat
+function ns.ManaPotion()
+    if not ns.usesMana or not ns.db.potions then return nil end
+    if not ns.flag(UnitAffectingCombat("player")) then return nil end
+    local mana = ns.Percent("player", Enum.PowerType.Mana)
+    local short = mana and mana < ns.db.potionMana
+    if mana == nil and ns.manaProbes then
+        for _, p in ipairs(ns.manaProbes) do
+            if ns.NoResource(p) then short = true; break end
         end
-        if short and ns.Lives(30, 10) then -- not for a mob about to die
-            local s = ns.ReadyItem(ns.MANA_POTIONS); if s then return s end
-        end
+    end
+    if short and ns.Lives(30, 10) then -- not for a mob about to die
+        local s = ns.ReadyItem(ns.MANA_POTIONS); if s then return s end
     end
 end
 
@@ -894,6 +971,7 @@ end
 ---------------------------------------------------------------------------
 ns.rotation = nil -- function() -> spellID or nil; set by a class module
 ns.suggestion = nil
+ns.cdSuggestion = nil -- long cooldown for the second square (ns.cdPick while the rotation runs)
 
 ---------------------------------------------------------------------------
 -- Events / update loop
@@ -909,22 +987,26 @@ local function update(_, elapsed)
     elapsedLabels = elapsedLabels + elapsed
     if elapsedSuggest >= 0.15 then
         elapsedSuggest = 0
-        local s
+        local s, cd
         if ns.rotation and ns.HostileTarget() then
+            ns.cdPick = nil
             local ok, res = pcall(ns.rotation)
             if ok then s = res elseif ns.db.debug then ns.Print("rotation error: " .. tostring(res)) end
+            cd = ns.cdPick
+            if not s and ok then s = ns.ManaPotion() end -- nothing to cast: drink
         end
         if ns.db.trace and ns.TraceState and ns.HostileTarget() then
             local now = GetTime()
             local fighting = ns.flag(UnitAffectingCombat("player"))
-            if s ~= ns.suggestion or (fighting and now - (ns.lastTrace or 0) > 1) then
+            if s ~= ns.suggestion or cd ~= ns.cdSuggestion or (fighting and now - (ns.lastTrace or 0) > 1) then
                 ns.lastTrace = now
                 local ok, state = pcall(ns.TraceState)
-                ns.Trace(("%s | %s"):format(s and C_Spell.GetSpellName(s) or "-", ok and state or ("err " .. tostring(state))))
+                ns.Trace(("%s%s | %s"):format(s and C_Spell.GetSpellName(s) or "-",
+                    cd and (" +" .. (C_Spell.GetSpellName(cd) or cd)) or "", ok and state or ("err " .. tostring(state))))
             end
         end
-        if s ~= ns.suggestion then
-            ns.suggestion = s
+        if s ~= ns.suggestion or cd ~= ns.cdSuggestion then
+            ns.suggestion, ns.cdSuggestion = s, cd
             ns.ShowSuggestion(s)
         end
     end
@@ -974,8 +1056,12 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
         applied["target"] = nil
         ns.ResetComboEstimate()
         ns.labelsDirty = true
+        ns.NoteCreatureType("target")
+    elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
+        onCombatLog()
     elseif event == "NAME_PLATE_UNIT_ADDED" then
         plates[arg1] = true
+        ns.NoteCreatureType(arg1)
     elseif event == "NAME_PLATE_UNIT_REMOVED" then
         plates[arg1] = nil
     elseif event == "PLAYER_DEAD" then
@@ -992,7 +1078,7 @@ for _, e in ipairs({
     "ADDON_LOADED", "PLAYER_LOGIN", "SPELLS_CHANGED", "LEARNED_SPELL_IN_SKILL_LINE",
     "PLAYER_TARGET_CHANGED", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_DEAD",
     "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_PAGE_CHANGED", "UPDATE_BONUS_ACTIONBAR",
-    "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "PLAYER_LEVEL_UP",
+    "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "PLAYER_LEVEL_UP", "COMBAT_LOG_EVENT_UNFILTERED",
 }) do
     pcall(frame.RegisterEvent, frame, e)
 end
@@ -1016,6 +1102,7 @@ local HELP = {
     "/frot trace - keep a log of rotation decisions (for bug reports) on/off",
     "/frot aggro - what the aggro log has collected so far",
     "/frot spells - save your spellbook (name and id) for bug reports",
+    "/frot immune [clear] - immunities learned from the combat log",
 }
 
 local function toggle(key)
@@ -1042,6 +1129,21 @@ SlashCmdList.FOREVERROTATION = function(msg)
         ns.Debug()
     elseif cmd == "aggro" then
         if ns.AggroStats then ns.AggroStats() end
+    elseif cmd == "immune" then
+        local list = ns.cdb and ns.cdb.immune
+        if arg == "clear" then
+            if ns.cdb then ns.cdb.immune, ns.cdb.immuneNames = nil, nil end
+            ns.Print("learned immunities forgotten")
+        elseif not list or not next(list) then
+            ns.Print("no learned immunities yet (an \"immune\" miss of yours teaches one)")
+        else
+            local names = ns.cdb.immuneNames or {}
+            for key in pairs(list) do
+                local npc, spell = key:match("^(%d+):(.+)$")
+                ns.Print(("%s (npc %s): %s"):format(names[key] or "?", npc or "?", spell or key))
+            end
+            ns.Print("/frot immune clear forgets them")
+        end
     elseif cmd == "spells" then
         ns.ScanSpellbook()
         local out = {}

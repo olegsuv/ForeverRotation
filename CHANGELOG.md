@@ -1,3 +1,10 @@
+## 0.9.0
+
+- Second square, right of the first, with an orange frame: a long cooldown that is due (Rapid Fire, Bestial Wrath, Death Wish, Arcane Power... anything with a base cooldown of 90 s or more). The first square keeps the next spell, so a cooldown never hides what to cast. Its button glows too.
+- Immunities are learned: when a spell of yours is "immune" on a mob kind, it is not suggested on that kind again (per character). `/frot immune` lists them, `/frot immune clear` forgets them.
+- The creature type is remembered per mob kind, so Serpent Sting is no longer suggested on mechanicals in combat (the game hides the type there).
+- The mana potion comes after the spells: it is suggested when there is nothing left to cast. The healing potion still comes first.
+
 ## 0.8.0
 
 - A line in the party chat when you are the group's top damage in a dungeon (like Questie's quest announcements): once per run, right after a boss dies, with at least three people dealing damage. Pets count for their owner. Settings: "Tell the party when you top the damage".

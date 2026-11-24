@@ -140,28 +140,36 @@ end
 
 -- also returns the key and the texture of the first such button (the button shows the
 -- potion's item icon, Auto Shot's weapon icon...), nil when none holds it
-local function glowButtons(spellID, noGlow)
+local function glowButtons(spellID, noGlow, cdID)
     local name = spellID and C_Spell.GetSpellName(spellID)
-    local key, tex
+    local cdName = cdID and C_Spell.GetSpellName(cdID)
+    local key, tex, cdKey, cdTex
     for _, b in ipairs(buttons) do
-        local match = false
-        if name and b:IsVisible() then
+        local match, cdMatch = false, false
+        if (name or cdName) and b:IsVisible() then
             local id = spellOf(b)
-            match = id and C_Spell.GetSpellName(id) == name or false
+            local n = id and C_Spell.GetSpellName(id)
+            match = n ~= nil and n == name
+            cdMatch = n ~= nil and n == cdName
             if match and not tex then
                 key = hotkeyOf(b)
                 local slot = slotOf(b)
                 tex = slot and ns.safe(GetActionTexture, slot)
             end
+            if cdMatch and not cdTex then
+                cdKey = hotkeyOf(b)
+                local slot = slotOf(b)
+                cdTex = slot and ns.safe(GetActionTexture, slot)
+            end
         end
-        local on = match and ns.db.glow and not noGlow
+        local on = ns.db.glow and ((match and not noGlow) or cdMatch)
         if on and not b.frGlow:IsShown() then
             b.frGlow:Show(); b.frGlow.anim:Play()
         elseif not on and b.frGlow:IsShown() then
             b.frGlow.anim:Stop(); b.frGlow:Hide()
         end
     end
-    return key, tex
+    return key, tex, cdKey, cdTex
 end
 
 ---------------------------------------------------------------------------
@@ -270,6 +278,22 @@ function ns.InitIcon()
     end)
     icon:Hide()
 
+    -- second square, right of the first: a long cooldown that is due (orange frame)
+    local cd = CreateFrame("Frame", "ForeverRotationCooldownIcon", UIParent, "BackdropTemplate")
+    cd:SetSize(40, 40)
+    cd:SetFrameStrata("MEDIUM")
+    cd:SetPoint("LEFT", icon, "RIGHT", 4, 0)
+    cd:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 2 })
+    cd:SetBackdropBorderColor(1, 0.55, 0.1, 1)
+    cd.tex = cd:CreateTexture(nil, "ARTWORK")
+    cd.tex:SetPoint("TOPLEFT", 2, -2)
+    cd.tex:SetPoint("BOTTOMRIGHT", -2, 2)
+    cd.tex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    cd.key = cd:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmallGray")
+    cd.key:SetPoint("TOPRIGHT", -2, -3)
+    cd:Hide()
+    icon.cd = cd
+
     -- range zone line under the square (only while the square shows something)
     local zone = CreateFrame("Frame", nil, UIParent)
     zone:SetSize(120, 16)
@@ -372,8 +396,17 @@ function ns.ShowSuggestion(spellID)
     -- Auto Shot already shooting: show it, but don't make it glow (a press would stop it)
     local name = spellID and C_Spell.GetSpellName(spellID)
     local idle = name and ns.idleSpell and name == C_Spell.GetSpellName(ns.idleSpell) and ns.ButtonActive(name)
-    local key, btnTex = glowButtons((live and not move) and spellID or nil, idle)
+    local cdID = live and ns.cdSuggestion or nil
+    local key, btnTex, cdKey, cdTex = glowButtons((live and not move) and spellID or nil, idle, cdID)
     if not icon then return end
+    if cdID and ns.db.icon then
+        icon.cd:SetScale(ns.db.iconScale or 1)
+        icon.cd.tex:SetTexture(cdTex or suggestionTexture(cdID))
+        icon.cd.key:SetText(cdKey or "")
+        icon.cd:Show()
+    else
+        icon.cd:Hide()
+    end
     if live and ns.db.icon and (move or spellID) then
         if move then
             -- step closer: green arrow up; step back: red arrow down

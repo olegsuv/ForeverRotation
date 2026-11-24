@@ -15,8 +15,8 @@ local ASPECT_HAWK, ASPECT_MONKEY, ASPECT_CHEETAH, ASPECT_PACK, ASPECT_BEAST, ASP
 local NO_STING = { ["Mechanical"] = true, ["Механизм"] = true }
 
 local function stingWorthIt()
-    local ctype = ns.safe(UnitCreatureType, "target")
-    if ctype and not ns.isSecret(ctype) and NO_STING[ctype] then return false end
+    local ctype = ns.TargetType() -- remembered per npc: the game hides it in combat
+    if ctype and NO_STING[ctype] then return false end
     return ns.Lives(30, 8) -- dies before it ticks
 end
 

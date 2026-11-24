@@ -9,6 +9,8 @@ Small helper for **WoW Forever** (Interface 16001):
   leveling guides:
   - **Hunter** – Mark and Sting only on mobs that live, Aimed Shot vs Multi-Shot by damage, hawks,
     melee weaving, aspect reminder, range zone icon by the nameplate.
+- Long cooldowns on a second square with an orange frame, so they never hide the next spell.
+- Immunities learned from the combat log: a spell a mob kind is immune to is not suggested on it again.
 - In a dungeon, a party chat line when you are the group's top damage (once per run, after a
     boss; off in Settings).
   - **Warrior** – Shout, Charge, Victory Rush, Execute / Overpower / Revenge, Mortal Strike / Bloodthirst,
