@@ -971,8 +971,7 @@ function ns.NoteBlocked(how, a, b, c)
     if ns.cdb then
         ns.cdb.blocked = ns.cdb.blocked or {}
         local t = ns.cdb.blocked
-        t[#t + 1] = line .. "
-" .. where
+        t[#t + 1] = line .. "\n" .. where
         while #t > 20 do table.remove(t, 1) end
     end
 end

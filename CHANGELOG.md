@@ -1,4 +1,4 @@
-## 0.9.4
+## 0.9.5
 
 - The "blocked from an action" popup is caught at the popup too (the event did not reach the addon); `/frot blocked` keeps the call stack.
 
