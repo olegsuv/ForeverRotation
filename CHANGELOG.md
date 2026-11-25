@@ -1,3 +1,9 @@
+## 0.9.7
+
+- Fixed: a storm of Lua errors in combat inside dungeons ("attempted to index a table that cannot be indexed with secret keys"). The game hides the target's guid there; every guid read now treats a hidden value as none.
+- The remembered creature types are keyed by the mob's name as well as its id, so Serpent Sting stays off mechanicals in combat inside dungeons too (where the id is hidden).
+- Hidden classification and names no longer reach the boss check and the party line.
+
 ## 0.9.6
 
 - Fixed: "ForeverRotation has been blocked from an action only available to the Blizzard UI" at every load. Forever does not let addons read the combat log, and the addon asked for it since 0.8.0 (in dungeons) and 0.9.0 (everywhere). The combat log is gone from the addon.

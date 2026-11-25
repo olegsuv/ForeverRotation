@@ -333,8 +333,14 @@ function ns.TargetOnMe()
 end
 
 -- npc id out of a creature guid, nil for players and pets
+-- guid of a unit, nil when the game hides it (in combat inside instances it is secret)
+function ns.GUID(unit)
+    local g = ns.safe(UnitGUID, unit)
+    if g and not isSecret(g) then return g end
+end
+
 function ns.NpcID(guid)
-    if type(guid) ~= "string" then return nil end
+    if type(guid) ~= "string" or isSecret(guid) then return nil end
     local kind, id = guid:match("^(%a+)%-%d+%-%d+%-%d+%-%d+%-(%d+)")
     if kind == "Creature" or kind == "Vehicle" then return tonumber(id) end
 end
@@ -344,11 +350,13 @@ end
 function ns.NoteCreatureType(unit)
     local t = ns.safe(UnitCreatureType, unit)
     if not t or isSecret(t) then return end
-    local npc = ns.NpcID(UnitGUID(unit))
-    if npc and ns.db then
-        ns.db.ctype = ns.db.ctype or {}
-        ns.db.ctype[npc] = t
-    end
+    if not ns.db then return end
+    ns.db.ctype = ns.db.ctype or {}
+    local npc = ns.NpcID(ns.GUID(unit))
+    if npc then ns.db.ctype[npc] = t end
+    -- by name too: in combat inside instances the guid is hidden, the name may not be
+    local n = ns.safe(UnitName, unit)
+    if type(n) == "string" and not isSecret(n) then ns.db.ctype[n] = t end
 end
 
 -- what the aggro log already knows (it has seen hundreds of mobs with their type)
@@ -366,8 +374,12 @@ end
 function ns.TargetType()
     local t = ns.safe(UnitCreatureType, "target")
     if t and not isSecret(t) then return t end
-    local npc = ns.NpcID(UnitGUID("target"))
-    return npc and ns.db and ns.db.ctype and ns.db.ctype[npc] or nil
+    local cache = ns.db and ns.db.ctype
+    if not cache then return nil end
+    local npc = ns.NpcID(ns.GUID("target"))
+    if npc and cache[npc] then return cache[npc] end
+    local n = ns.safe(UnitName, "target")
+    if type(n) == "string" and not isSecret(n) then return cache[n] end
 end
 
 local BLEED_IMMUNE = { Mechanical = true, Elemental = true, ["Механизм"] = true, ["Элементаль"] = true }
@@ -884,7 +896,7 @@ end
 -- a boss: the classification says so, or a ?? mob inside an instance
 function ns.TargetIsBoss()
     local cls = ns.safe(UnitClassification, "target")
-    if cls == "worldboss" then return true end
+    if cls and not isSecret(cls) and cls == "worldboss" then return true end
     if ns.flag(ns.safe(UnitIsBossMob, "target")) == true then return true end
     local _, instance = IsInInstance()
     if instance == "party" or instance == "raid" then
@@ -924,7 +936,7 @@ end
 local shotSeen, shotTarget = 0, nil
 function ns.AutoShooting(id)
     local now = GetTime()
-    local guid = UnitGUID("target")
+    local guid = ns.GUID("target") or "hidden"
     if guid ~= shotTarget then shotTarget, shotSeen = guid, 0 end
     local on = false
     if C_Spell.IsCurrentSpell and ns.flag(ns.safe(C_Spell.IsCurrentSpell, id)) then on = true end

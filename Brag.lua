@@ -19,15 +19,19 @@ local function reset()
 end
 
 local function isBoss(unit)
-    if ns.safe(UnitClassification, unit) == "worldboss" then return true end
+    local cls = ns.safe(UnitClassification, unit)
+    if cls and not ns.isSecret(cls) and cls == "worldboss" then return true end
     if ns.flag(ns.safe(UnitIsBossMob, unit)) == true then return true end
     return ns.num(ns.safe(UnitLevel, unit)) == -1
 end
 
 local function noteBoss(unit)
     if not inside or not UnitExists(unit) or not isBoss(unit) then return end
-    local guid = UnitGUID(unit)
-    if guid then bosses[guid] = UnitName(unit) or "the boss" end
+    local guid = ns.GUID(unit)
+    if guid then
+        local n = ns.safe(UnitName, unit)
+        bosses[guid] = (type(n) == "string" and not ns.isSecret(n)) and n or "the boss"
+    end
 end
 
 -- damage per group member in Details' current segment: name -> total (pets are already
@@ -94,8 +98,9 @@ local function announce(bossName)
     if said or not ns.db.brag then return end
     local totals = detailsDamage()
     if not totals then return end
-    local me = UnitName("player")
-    local mine = me and totals[me]
+    local me = ns.safe(UnitName, "player")
+    if type(me) ~= "string" or ns.isSecret(me) then return end
+    local mine = totals[me]
     if not mine or mine <= 0 then return end
     local total, n, top = 0, 0, true
     for name, d in pairs(totals) do
@@ -113,7 +118,7 @@ end
 
 -- a boss you have seen reads as dead on the target (no combat log on Forever)
 local function checkDead(unit)
-    local guid = UnitGUID(unit)
+    local guid = ns.GUID(unit)
     local name = guid and bosses[guid]
     if not name then return end
     if ns.flag(ns.safe(UnitIsDeadOrGhost, unit)) == true then
