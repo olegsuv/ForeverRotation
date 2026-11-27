@@ -147,6 +147,7 @@ function ns.Ready(spell, checkRange)
     if not id then return false end
     if not ns.Usable(id) then return false end
     if ns.OnCooldown(id) then return false end
+    if ns.dotSpells[C_Spell.GetSpellName(id) or ""] and ns.DotImmune(C_Spell.GetSpellName(id)) then return false end
     if checkRange and ns.InRange(id) == false then return false end
     return true, id
 end
@@ -371,15 +372,90 @@ local function seedCreatureTypes()
     end
 end
 
-function ns.TargetType()
+-- mechanicals by name, for mobs only ever met in combat (a dungeon's trash): the game hides
+-- the type there, and they were never seen out of combat to remember it
+local MECH_NAMES = { "^Mechano", "^Mechanized ", "Shredder", "Clockwork", "Techbot", "^Harvest ",
+    "Robot", "Arcane Nullifier", "Security Suit", "Electrocutioner", "Crowd Pummeler", "Mech[%s%-]",
+    "^Механ", "Крошшер", "Робот", "Голем%-жнец" }
+local function mechByName(n)
+    for _, p in ipairs(MECH_NAMES) do
+        if n:find(p) then return true end
+    end
+    return false
+end
+
+-- every nameplate on screen, out of combat: the pack you are about to pull
+function ns.NoteNameplates()
+    if not C_NamePlate or not C_NamePlate.GetNamePlates then return end
+    local ok, plates = pcall(C_NamePlate.GetNamePlates)
+    if not ok or type(plates) ~= "table" then return end
+    for _, p in ipairs(plates) do
+        local unit = p.namePlateUnitToken or (p.UnitFrame and p.UnitFrame.unit)
+        if unit then ns.NoteCreatureType(unit) end
+    end
+end
+
+-- what the target was when you picked it: in combat inside instances the game hides its
+-- type, name, guid and classification, but a target picked out of combat stays the same
+-- mob until the target changes. A target picked in such a combat is unknown.
+local picked = {}
+local function readable(v) return v ~= nil and not isSecret(v) end
+
+local function lookupType()
     local t = ns.safe(UnitCreatureType, "target")
-    if t and not isSecret(t) then return t end
-    local cache = ns.db and ns.db.ctype
-    if not cache then return nil end
+    if readable(t) then return t end
+    local cache = ns.db and ns.db.ctype or {}
     local npc = ns.NpcID(ns.GUID("target"))
     if npc and cache[npc] then return cache[npc] end
     local n = ns.safe(UnitName, "target")
-    if type(n) == "string" and not isSecret(n) then return cache[n] end
+    if type(n) == "string" and not isSecret(n) then
+        if cache[n] then return cache[n] end
+        if mechByName(n) then return "Mechanical" end
+    end
+end
+
+function ns.NoteTargetPicked()
+    picked = {}
+    if ns.flag(ns.safe(UnitExists, "target")) ~= true then return end
+    picked.type = lookupType()
+    local cls = ns.safe(UnitClassification, "target")
+    if readable(cls) then picked.cls = cls end
+    local lvl = ns.safe(UnitLevel, "target")
+    if readable(lvl) then picked.level = lvl end
+end
+
+-- the game hides who the target is right now (combat inside an instance)
+function ns.TargetHidden()
+    return not readable(ns.safe(UnitGUID, "target"))
+end
+
+-- creature type, nil when not known
+function ns.TargetType()
+    return lookupType() or picked.type
+end
+
+-- classification, live or as picked; nil when not known
+function ns.TargetClass()
+    local cls = ns.safe(UnitClassification, "target")
+    if readable(cls) then return cls end
+    return picked.cls
+end
+
+function ns.TargetLevel()
+    local lvl = ns.safe(UnitLevel, "target")
+    if readable(lvl) then return lvl end
+    return picked.level
+end
+
+-- for the trace: what the game lets us read about the target right now
+function ns.TargetTypeTrace()
+    local t = ns.safe(UnitCreatureType, "target")
+    local n = ns.safe(UnitName, "target")
+    local g = ns.safe(UnitGUID, "target")
+    local function st(v) if v == nil then return "nil" elseif isSecret(v) then return "S" else return "ok" end end
+    local cls = ns.safe(UnitClassification, "target")
+    return ("type=%s(%s) name=%s guid=%s cls=%s(%s)"):format(tostring(ns.TargetType() or "?"), st(t), st(n), st(g),
+        tostring(ns.TargetClass() or "?"), st(cls))
 end
 
 local BLEED_IMMUNE = { Mechanical = true, Elemental = true, ["Механизм"] = true, ["Элементаль"] = true }
@@ -408,9 +484,8 @@ local function isPlayerTarget()
 end
 
 local function killKind()
-    local cls = ns.safe(UnitClassification, "target")
-    if isSecret(cls) then cls = nil end
-    local lvl = ns.num(ns.safe(UnitLevel, "target"))
+    local cls = ns.TargetClass()   -- as picked when the game hides it
+    local lvl = ns.num(ns.TargetLevel())
     local boss = cls == "worldboss" or ns.flag(ns.safe(UnitIsBossMob, "target")) == true
     local _, instance = IsInInstance()
     local dungeon = instance == "party" or instance == "raid"
@@ -813,9 +888,52 @@ function ns.RecentCasts(name, window)
     return n
 end
 
+---------------------------------------------------------------------------
+-- Immunities are set per npc in the game, not per creature type. The type rules (a sting on
+-- a mechanical) are a first guess; on top, a DoT of yours that did not stick is learned:
+-- right after the cast its aura is readable and missing. Twice on the same npc kind (a miss
+-- or a resist happens once) and it is not suggested there again. Where the game hides the
+-- target's auras or guid (combat inside instances) nothing is learned, nothing is guessed.
+-- /frot immune lists them, /frot immune clear forgets them.
+---------------------------------------------------------------------------
+ns.dotSpells = {} -- [spell name] = true: the class's DoTs worth checking (set in InitClass)
+
+local function checkStuck(name)
+    local guid = ns.GUID("target")
+    local npc = ns.NpcID(guid)
+    if not npc or not (C_UnitAuras and C_UnitAuras.GetAuraDataBySpellName) then return end
+    local who = ns.safe(UnitName, "target")
+    C_Timer.After(0.8, function()
+        if ns.GUID("target") ~= guid then return end
+        if ns.flag(ns.safe(UnitIsDeadOrGhost, "target")) == true then return end
+        local ok, aura = pcall(C_UnitAuras.GetAuraDataBySpellName, "target", name, "HARMFUL|PLAYER")
+        if not ok or isSecret(aura) then return end
+        local db = ns.db
+        db.noDot = db.noDot or {}
+        local key = npc .. ":" .. name
+        if aura ~= nil then db.noDot[key] = nil; return end -- it sticks here
+        local n = (db.noDot[key] or 0) + 1
+        db.noDot[key] = n
+        if n == 2 then
+            db.noDotNames = db.noDotNames or {}
+            db.noDotNames[key] = (type(who) == "string" and not isSecret(who)) and who or "?"
+            ns.Print(("%s doesn't stick on %s: not suggested there any more (/frot immune)"):format(name, db.noDotNames[key]))
+        end
+    end)
+end
+
+-- this DoT was learned not to stick on the target's npc kind
+function ns.DotImmune(name)
+    local list = ns.db and ns.db.noDot
+    if not list or not name then return false end
+    local npc = ns.NpcID(ns.GUID("target"))
+    return npc ~= nil and (list[npc .. ":" .. name] or 0) >= 2
+end
+
 local function onCast(spellID)
     local name = ns.safe(C_Spell.GetSpellName, spellID)
     if not name or isSecret(name) then return end
+    if ns.dotSpells[name] then checkStuck(name) end
     local list = castLog[name] or {}
     castLog[name] = list
     list[#list + 1] = GetTime()
@@ -886,8 +1004,8 @@ function ns.EnemyCount(rangeSpellID)
 end
 
 function ns.TargetIsTough()
-    local cls = ns.safe(UnitClassification, "target")
-    if cls and not isSecret(cls) and (cls == "elite" or cls == "rareelite" or cls == "worldboss") then
+    local cls = ns.TargetClass()
+    if cls == "elite" or cls == "rareelite" or cls == "worldboss" then
         return true
     end
     return ns.flag(ns.safe(UnitIsPlayer, "target")) == true
@@ -895,12 +1013,11 @@ end
 
 -- a boss: the classification says so, or a ?? mob inside an instance
 function ns.TargetIsBoss()
-    local cls = ns.safe(UnitClassification, "target")
-    if cls and not isSecret(cls) and cls == "worldboss" then return true end
+    if ns.TargetClass() == "worldboss" then return true end
     if ns.flag(ns.safe(UnitIsBossMob, "target")) == true then return true end
     local _, instance = IsInInstance()
     if instance == "party" or instance == "raid" then
-        return ns.num(ns.safe(UnitLevel, "target")) == -1
+        return ns.TargetLevel() == -1
     end
     return false
 end
@@ -998,9 +1115,15 @@ ns.frame = frame
 local elapsedSuggest, elapsedLabels = 0, 0
 ns.labelsDirty = true
 
+local elapsedPlates = 0
 local function update(_, elapsed)
     elapsedSuggest = elapsedSuggest + elapsed
     elapsedLabels = elapsedLabels + elapsed
+    elapsedPlates = elapsedPlates + elapsed
+    if elapsedPlates >= 2 then -- out of combat: learn the types of what is on screen
+        elapsedPlates = 0
+        if not ns.flag(UnitAffectingCombat("player")) then pcall(ns.NoteNameplates) end
+    end
     if elapsedSuggest >= 0.15 then
         elapsedSuggest = 0
         local s, cd
@@ -1080,8 +1203,11 @@ frame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
         ns.ResetComboEstimate()
         ns.labelsDirty = true
         ns.NoteCreatureType("target")
+        ns.NoteTargetPicked()
     elseif event == "UPDATE_MOUSEOVER_UNIT" then
         ns.NoteCreatureType("mouseover")
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        ns.NoteNameplates()
     elseif event == "ADDON_ACTION_FORBIDDEN" or event == "ADDON_ACTION_BLOCKED" then
         -- which call the game refused, and from where: printed, and kept for /frot blocked
         ns.NoteBlocked(event, arg1, arg2, arg3)
@@ -1104,7 +1230,7 @@ for _, e in ipairs({
     "ADDON_ACTION_FORBIDDEN", "ADDON_ACTION_BLOCKED", "ADDON_LOADED", "PLAYER_LOGIN", "SPELLS_CHANGED", "LEARNED_SPELL_IN_SKILL_LINE",
     "PLAYER_TARGET_CHANGED", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_DEAD",
     "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_PAGE_CHANGED", "UPDATE_BONUS_ACTIONBAR",
-    "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "PLAYER_LEVEL_UP", "UPDATE_MOUSEOVER_UNIT",
+    "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "PLAYER_LEVEL_UP", "UPDATE_MOUSEOVER_UNIT", "PLAYER_REGEN_ENABLED",
 }) do
     pcall(frame.RegisterEvent, frame, e)
 end
@@ -1129,6 +1255,7 @@ local HELP = {
     "/frot aggro - what the aggro log has collected so far",
     "/frot spells - save your spellbook (name and id) for bug reports",
     "/frot blocked - what the game refused the addon, and from where",
+    "/frot immune [clear] - DoTs learned not to stick on a mob kind",
 }
 
 local function toggle(key)
@@ -1159,6 +1286,23 @@ SlashCmdList.FOREVERROTATION = function(msg)
         local t = ns.cdb and ns.cdb.blocked
         if not t or #t == 0 then ns.Print("nothing blocked so far") end
         for _, line in ipairs(t or {}) do ns.Print(line) end
+    elseif cmd == "immune" then
+        local list = ns.db.noDot
+        if arg == "clear" then
+            ns.db.noDot, ns.db.noDotNames = nil, nil
+            ns.Print("learned immunities forgotten")
+        else
+            local names, any = ns.db.noDotNames or {}, false
+            for key, n in pairs(list or {}) do
+                if n >= 2 then
+                    any = true
+                    local npc, spell = key:match("^(%d+):(.+)$")
+                    ns.Print(("%s (npc %s): %s"):format(names[key] or "?", npc or "?", spell or key))
+                end
+            end
+            if not any then ns.Print("nothing learned yet: a DoT that doesn't stick twice on a mob kind is") end
+            if any then ns.Print("/frot immune clear forgets them") end
+        end
     elseif cmd == "spells" then
         ns.ScanSpellbook()
         local out = {}

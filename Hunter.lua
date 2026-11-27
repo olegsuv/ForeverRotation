@@ -11,12 +11,17 @@ local SUMMON_HAWK, SNIPER_SHOT = 1293241, 1310687
 local VOLLEY, BESTIAL_WRATH, INTIMIDATION = 1510, 19574, 19577
 local ASPECT_HAWK, ASPECT_MONKEY, ASPECT_CHEETAH, ASPECT_PACK, ASPECT_BEAST, ASPECT_WILD = 13165, 13163, 5118, 13159, 13161, 20043
 
--- Serpent Sting does nothing to these (enUS / ruRU creature types)
-local NO_STING = { ["Mechanical"] = true, ["Механизм"] = true }
+-- Serpent Sting is nature poison. Immunity is set per npc in the game, but these types almost
+-- always have it: mechanicals (no poison) and elementals (many are nature-immune). Other
+-- npcs that shrug it off are learned (ns.DotImmune). enUS / ruRU creature types.
+local NO_STING = { ["Mechanical"] = true, ["Механизм"] = true, ["Elemental"] = true, ["Элементаль"] = true }
 
 local function stingWorthIt()
-    local ctype = ns.TargetType() -- remembered per npc: the game hides it in combat
+    local ctype = ns.TargetType()
     if ctype and NO_STING[ctype] then return false end
+    -- the game hides what the mob is (combat inside an instance, target picked in combat):
+    -- no global cooldown on a poison that may not stick
+    if not ctype and ns.TargetHidden() then return false end
     return ns.Lives(30, 8) -- dies before it ticks
 end
 
@@ -25,6 +30,12 @@ local function name(id) return C_Spell.GetSpellName(id) end
 local function dps(baseID, targets)
     local _, id = ns.Spell(baseID)
     return id and ns.DPS(id, targets) or 0
+end
+
+-- a pet is out and alive (the game says "usable" for pet spells even without one)
+local function hasPet()
+    if ns.flag(ns.safe(UnitExists, "pet")) ~= true then return false end
+    return ns.flag(ns.safe(UnitIsDeadOrGhost, "pet")) ~= true
 end
 
 local function petAlive()
@@ -145,8 +156,9 @@ local function rotation()
         function() if manaOk and stingWorthIt() and lives and not ns.DebuffUp(name(SERPENT_STING)) then return ns.Ready(SERPENT_STING, true) end end,
         -- cooldowns on elites and players
         -- long cooldowns: bosses and elites that take a while, not dungeon trash
-        function() if ns.BigFight() then return ns.Ready(BESTIAL_WRATH) end end,
-        function() if tough then return ns.Ready(INTIMIDATION, true) end end,
+        function() if ns.BigFight() and hasPet() then return ns.Ready(BESTIAL_WRATH) end end,
+        -- Intimidation: the pet's stun, to get a mob off you (not off the tank)
+        function() if tough and hasPet() and onMe == true then return ns.Ready(INTIMIDATION, true) end end,
         function() if ns.BigFight() then return ns.Ready(RAPID_FIRE) end end,
         -- dying mob: an instant Arcane Shot, not a 2 s cast
         function() if not lives then return ns.Ready(ARCANE_SHOT, true) end end,
@@ -177,6 +189,7 @@ function ns.TraceExtra()
     out[#out + 1] = "wing=" .. tostring(wc and ns.InRange(wc))
     out[#out + 1] = "stingUp=" .. tostring(ns.DebuffUp(name(SERPENT_STING)))
     out[#out + 1] = "hawkUp=" .. tostring(ns.PlayerBuff(name(ASPECT_HAWK)))
+    out[#out + 1] = ns.TargetTypeTrace()
     return table.concat(out, " ")
 end
 
@@ -227,6 +240,8 @@ function ns.InitClass()
     ns.exclusiveBuffs["Aspect of the Falcon"] = true
     local mark = name(HUNTERS_MARK)
     if mark then ns.durations[mark] = 120 end
+    local sting = name(SERPENT_STING)
+    if sting then ns.dotSpells[sting] = true end -- learned when it doesn't stick
     local sting = name(SERPENT_STING)
     if sting then ns.durations[sting] = 15 end
     ns.zoneUseful = true

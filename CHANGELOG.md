@@ -1,3 +1,11 @@
+## 0.10.0
+
+- Serpent Sting: never on mechanicals and elementals, and not at all when the game hides what the target is (combat inside an instance, target picked in that combat) instead of spending a global cooldown on a poison that may not stick.
+- What a target is (type, elite / boss, level) is remembered when you pick it and kept until the target changes, so a mob targeted before the pull is known in dungeon combat too. Elites and bosses in dungeons now count as such for long cooldowns, the cooldown square and kill times (they all read as normal mobs there).
+- Creature types are learned from every nameplate on screen out of combat; mechanicals are also recognised by name (Mechano-, Mechanized, Shredder...).
+- A DoT that doesn't stick twice on a mob kind is learned and no longer suggested there (where the game shows the target's auras). `/frot immune` lists them, `/frot immune clear` forgets them.
+- Hunter: Intimidation only with a living pet and the mob on you (not on the tank); Bestial Wrath only with a living pet.
+
 ## 0.9.7
 
 - Fixed: a storm of Lua errors in combat inside dungeons ("attempted to index a table that cannot be indexed with secret keys"). The game hides the target's guid there; every guid read now treats a hidden value as none.
